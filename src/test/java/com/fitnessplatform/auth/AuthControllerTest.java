@@ -94,7 +94,9 @@ class AuthControllerTest {
                                   "password": "StrongPassword123!"
                                 }
                                 """))
-                .andExpect(status().isConflict());
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.title").value("Email already registered"));
     }
 
     @Test

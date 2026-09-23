@@ -9,6 +9,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -84,5 +85,35 @@ class RegistrationServiceTest {
 
         verify(passwordEncoder, never()).encode(any());
         verify(userRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void shouldRejectDuplicateEmailWhenDatabaseConstraintIsViolated() {
+        RegisterRequest request = new RegisterRequest(
+                "duplicate@example.com",
+                "StrongPassword123!"
+        );
+
+        when(userRepository.existsByEmail("duplicate@example.com"))
+                .thenReturn(false);
+
+        when(passwordEncoder.encode("StrongPassword123!"))
+                .thenReturn("encoded-password");
+
+        when(userRepository.saveAndFlush(any(User.class)))
+                .thenThrow(new DataIntegrityViolationException(
+                        "Unique constraint violation"
+                ));
+
+        assertThrows(
+                EmailAlreadyRegisteredException.class,
+                () -> registrationService.register(request)
+        );
+
+        verify(userRepository)
+                .existsByEmail("duplicate@example.com");
+
+        verify(userRepository)
+                .saveAndFlush(any(User.class));
     }
 }
