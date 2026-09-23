@@ -1,5 +1,6 @@
 package com.fitnessplatform.auth;
 
+import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -11,13 +12,17 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.HttpStatusAccessDeniedHandler;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
-import jakarta.servlet.DispatcherType;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 public class SecurityConfig {
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            JwtAuthenticationFilter jwtAuthenticationFilter
+    ) throws Exception {
+
         http
                 .csrf(csrf -> csrf.spa())
 
@@ -55,7 +60,12 @@ public class SecurityConfig {
 
                 .formLogin(form -> form.disable())
                 .httpBasic(basic -> basic.disable())
-                .logout(logout -> logout.disable());
+                .logout(logout -> logout.disable())
+
+                .addFilterBefore(
+                        jwtAuthenticationFilter,
+                        UsernamePasswordAuthenticationFilter.class
+                );
 
         return http.build();
     }

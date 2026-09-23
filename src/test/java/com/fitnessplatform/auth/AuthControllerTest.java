@@ -10,15 +10,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -76,6 +77,50 @@ class AuthControllerTest {
     }
 
     @Test
+    void shouldLoginAndSetAuthenticationCookie() throws Exception {
+        String rawPassword = "StrongPassword123!";
+
+        User user = new User(
+                "samuel@example.com",
+                passwordEncoder.encode(rawPassword),
+                UserRole.USER
+        );
+
+        user = userRepository.saveAndFlush(user);
+
+        mockMvc.perform(post("/api/auth/login")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                              "email": "samuel@example.com",
+                              "password": "StrongPassword123!"
+                            }
+                            """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(user.getId().toString()))
+                .andExpect(jsonPath("$.email").value("samuel@example.com"))
+                .andExpect(jsonPath("$.role").value("USER"))
+                .andExpect(jsonPath("$.token").doesNotExist())
+                .andExpect(header().string(
+                        HttpHeaders.SET_COOKIE,
+                        containsString("AUTH_TOKEN=")
+                ))
+                .andExpect(header().string(
+                        HttpHeaders.SET_COOKIE,
+                        containsString("HttpOnly")
+                ))
+                .andExpect(header().string(
+                        HttpHeaders.SET_COOKIE,
+                        containsString("Path=/")
+                ))
+                .andExpect(header().string(
+                        HttpHeaders.SET_COOKIE,
+                        containsString("SameSite=Lax")
+                ));
+    }
+
+    @Test
     void shouldRejectDuplicateEmail() throws Exception {
         User existingUser = new User(
                 "existing@example.com",
@@ -100,6 +145,22 @@ class AuthControllerTest {
     }
 
     @Test
+    void shouldReturnUnauthorizedWhenEmailDoesNotExist() throws Exception {
+        mockMvc.perform(post("/api/auth/login")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                              "email": "unknown@example.com",
+                              "password": "StrongPassword123!"
+                            }
+                            """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.title").value("Invalid credentials"));
+    }
+
+    @Test
     void shouldRejectInvalidRegistrationInput() throws Exception {
         mockMvc.perform(post("/api/auth/register")
                         .with(csrf())
@@ -111,6 +172,30 @@ class AuthControllerTest {
                                 }
                                 """))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldReturnUnauthorizedWhenPasswordIsIncorrect() throws Exception {
+        User user = new User(
+                "samuel@example.com",
+                passwordEncoder.encode("CorrectPassword123!"),
+                UserRole.USER
+        );
+
+        userRepository.saveAndFlush(user);
+
+        mockMvc.perform(post("/api/auth/login")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                              "email": "samuel@example.com",
+                              "password": "WrongPassword123!"
+                            }
+                            """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.title").value("Invalid credentials"));
     }
 
     @Test
@@ -132,5 +217,18 @@ class AuthControllerTest {
                 .orElseThrow();
 
         assertEquals(UserRole.USER, user.getRole());
+    }
+
+    @Test
+    void shouldRejectLoginWithoutCsrf() throws Exception {
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                              "email": "samuel@example.com",
+                              "password": "StrongPassword123!"
+                            }
+                            """))
+                .andExpect(status().isForbidden());
     }
 }

@@ -50,4 +50,8 @@ public class JwtService {
 
         return UUID.fromString(claims.getSubject());
     }
+
+    public Duration getExpiration() {
+        return expiration;
+    }
 }
