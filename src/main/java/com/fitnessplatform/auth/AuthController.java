@@ -1,5 +1,8 @@
 package com.fitnessplatform.auth;
 
+import com.fitnessplatform.auth.passwordreset.ForgotPasswordRequest;
+import com.fitnessplatform.auth.passwordreset.PasswordResetService;
+import com.fitnessplatform.auth.passwordreset.ResetPasswordRequest;
 import com.fitnessplatform.user.User;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,10 +28,13 @@ public class AuthController {
     private final boolean cookieSecure;
     private final String cookieSameSite;
 
+    private final PasswordResetService passwordResetService;
+
     public AuthController(
             RegistrationService registrationService,
             AuthenticationService authenticationService,
             JwtService jwtService,
+            PasswordResetService passwordResetService,
             @Value("${security.auth.cookie.name}") String cookieName,
             @Value("${security.auth.cookie.secure}") boolean cookieSecure,
             @Value("${security.auth.cookie.same-site}") String cookieSameSite
@@ -36,6 +42,7 @@ public class AuthController {
         this.registrationService = registrationService;
         this.authenticationService = authenticationService;
         this.jwtService = jwtService;
+        this.passwordResetService = passwordResetService;
         this.cookieName = cookieName;
         this.cookieSecure = cookieSecure;
         this.cookieSameSite = cookieSameSite;
@@ -97,5 +104,24 @@ public class AuthController {
         return ResponseEntity.noContent()
                 .header(HttpHeaders.SET_COOKIE, cookie.toString())
                 .build();
+    }
+
+    @PostMapping("/forgot-password")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request
+    ) {
+        passwordResetService.requestReset(request.email());
+    }
+
+    @PostMapping("/reset-password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void resetPassword(
+            @Valid @RequestBody ResetPasswordRequest request
+    ) {
+        passwordResetService.resetPassword(
+                request.token(),
+                request.newPassword()
+        );
     }
 }

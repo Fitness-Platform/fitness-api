@@ -1,6 +1,9 @@
 package com.fitnessplatform.auth;
 
 import com.fitnessplatform.TestcontainersConfiguration;
+import com.fitnessplatform.auth.passwordreset.PasswordResetService;
+import com.fitnessplatform.auth.passwordreset.PasswordResetToken;
+import com.fitnessplatform.auth.passwordreset.PasswordResetTokenRepository;
 import com.fitnessplatform.user.User;
 import com.fitnessplatform.user.UserRepository;
 import com.fitnessplatform.user.UserRole;
@@ -15,6 +18,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
+
+import java.time.Instant;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.*;
@@ -38,10 +43,17 @@ class AuthControllerTest {
     private PasswordEncoder passwordEncoder;
 
     @Autowired
+    private PasswordResetTokenRepository passwordResetTokenRepository;
+
+    @Autowired
+    private PasswordResetService passwordResetService;
+
+    @Autowired
     private JwtService jwtService;
 
     @BeforeEach
     void cleanDatabase() {
+        passwordResetTokenRepository.deleteAll();
         userRepository.deleteAll();
     }
 
@@ -359,6 +371,302 @@ class AuthControllerTest {
     void shouldRejectLogoutWithoutCsrf() throws Exception {
         mockMvc.perform(
                         post("/api/auth/logout")
+                )
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void shouldAcceptPasswordResetRequestForExistingEmail()
+            throws Exception {
+
+        User user = new User(
+                "samuel@example.com",
+                passwordEncoder.encode("StrongPassword123!"),
+                UserRole.USER
+        );
+
+        userRepository.saveAndFlush(user);
+
+        mockMvc.perform(
+                        post("/api/auth/forgot-password")
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                    {
+                                      "email": "samuel@example.com"
+                                    }
+                                    """)
+                )
+                .andExpect(status().isAccepted());
+    }
+
+    @Test
+    void shouldAcceptPasswordResetRequestForUnknownEmail()
+            throws Exception {
+
+        mockMvc.perform(
+                        post("/api/auth/forgot-password")
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                    {
+                                      "email": "unknown@example.com"
+                                    }
+                                    """)
+                )
+                .andExpect(status().isAccepted());
+    }
+
+    @Test
+    void shouldResetPasswordWithValidToken() throws Exception {
+        User user = new User(
+                "samuel@example.com",
+                passwordEncoder.encode("OldPassword123!"),
+                UserRole.USER
+        );
+
+        userRepository.saveAndFlush(user);
+
+        String rawToken =
+                passwordResetService.requestReset(
+                        "samuel@example.com"
+                );
+
+        mockMvc.perform(
+                        post("/api/auth/reset-password")
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                    {
+                                      "token": "%s",
+                                      "newPassword": "NewPassword123!"
+                                    }
+                                    """.formatted(rawToken))
+                )
+                .andExpect(status().isNoContent());
+
+        User updatedUser = userRepository
+                .findByEmail("samuel@example.com")
+                .orElseThrow();
+
+        assertTrue(
+                passwordEncoder.matches(
+                        "NewPassword123!",
+                        updatedUser.getPasswordHash()
+                )
+        );
+
+        assertFalse(
+                passwordEncoder.matches(
+                        "OldPassword123!",
+                        updatedUser.getPasswordHash()
+                )
+        );
+    }
+
+    @Test
+    void shouldNotAllowPasswordResetTokenToBeReused()
+            throws Exception {
+
+        User user = new User(
+                "samuel@example.com",
+                passwordEncoder.encode("OldPassword123!"),
+                UserRole.USER
+        );
+
+        userRepository.saveAndFlush(user);
+
+        String rawToken =
+                passwordResetService.requestReset(
+                        "samuel@example.com"
+                );
+
+        String requestBody = """
+            {
+              "token": "%s",
+              "newPassword": "NewPassword123!"
+            }
+            """.formatted(rawToken);
+
+        mockMvc.perform(
+                        post("/api/auth/reset-password")
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(requestBody)
+                )
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(
+                        post("/api/auth/reset-password")
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(requestBody)
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(
+                        jsonPath("$.title")
+                                .value("Invalid password reset token")
+                );
+    }
+
+    @Test
+    void shouldRejectInvalidPasswordResetToken()
+            throws Exception {
+
+        mockMvc.perform(
+                        post("/api/auth/reset-password")
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                    {
+                                      "token": "does-not-exist",
+                                      "newPassword": "NewPassword123!"
+                                    }
+                                    """)
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(
+                        jsonPath("$.title")
+                                .value("Invalid password reset token")
+                );
+    }
+
+    @Test
+    void shouldAuthenticateOnlyWithNewPasswordAfterReset()
+            throws Exception {
+
+        User user = new User(
+                "samuel@example.com",
+                passwordEncoder.encode("OldPassword123!"),
+                UserRole.USER
+        );
+
+        userRepository.saveAndFlush(user);
+
+        String rawToken =
+                passwordResetService.requestReset(
+                        "samuel@example.com"
+                );
+
+        mockMvc.perform(
+                        post("/api/auth/reset-password")
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                    {
+                                      "token": "%s",
+                                      "newPassword": "NewPassword123!"
+                                    }
+                                    """.formatted(rawToken))
+                )
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(
+                        post("/api/auth/login")
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                    {
+                                      "email": "samuel@example.com",
+                                      "password": "OldPassword123!"
+                                    }
+                                    """)
+                )
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(
+                        post("/api/auth/login")
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                    {
+                                      "email": "samuel@example.com",
+                                      "password": "NewPassword123!"
+                                    }
+                                    """)
+                )
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void shouldRejectPasswordResetWithoutCsrf()
+            throws Exception {
+
+        mockMvc.perform(
+                        post("/api/auth/reset-password")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                    {
+                                      "token": "some-token",
+                                      "newPassword": "NewPassword123!"
+                                    }
+                                    """)
+                )
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void shouldInvalidatePreviousPasswordResetToken()
+            throws Exception {
+
+        User user = new User(
+                "samuel@example.com",
+                passwordEncoder.encode("OldPassword123!"),
+                UserRole.USER
+        );
+
+        userRepository.saveAndFlush(user);
+
+        String firstToken =
+                passwordResetService.requestReset(
+                        "samuel@example.com"
+                );
+
+        String secondToken =
+                passwordResetService.requestReset(
+                        "samuel@example.com"
+                );
+
+        mockMvc.perform(
+                        post("/api/auth/reset-password")
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                    {
+                                      "token": "%s",
+                                      "newPassword": "NewPassword123!"
+                                    }
+                                    """.formatted(firstToken))
+                )
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(
+                        post("/api/auth/reset-password")
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                    {
+                                      "token": "%s",
+                                      "newPassword": "NewPassword123!"
+                                    }
+                                    """.formatted(secondToken))
+                )
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void shouldRejectForgotPasswordWithoutCsrf()
+            throws Exception {
+
+        mockMvc.perform(
+                        post("/api/auth/forgot-password")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                    {
+                                      "email": "samuel@example.com"
+                                    }
+                                    """)
                 )
                 .andExpect(status().isForbidden());
     }
