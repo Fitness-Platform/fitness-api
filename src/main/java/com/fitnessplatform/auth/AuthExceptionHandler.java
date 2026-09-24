@@ -1,5 +1,6 @@
 package com.fitnessplatform.auth;
 
+import com.fitnessplatform.auth.passwordreset.InvalidPasswordResetTokenException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -31,6 +32,19 @@ public class AuthExceptionHandler {
         );
 
         problem.setTitle("Invalid credentials");
+        problem.setDetail(exception.getMessage());
+
+        return problem;
+    }
+
+    @ExceptionHandler(InvalidPasswordResetTokenException.class)
+    ProblemDetail handleInvalidPasswordResetToken(
+            InvalidPasswordResetTokenException exception
+    ) {
+        ProblemDetail problem =
+                ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+
+        problem.setTitle("Invalid password reset token");
         problem.setDetail(exception.getMessage());
 
         return problem;
