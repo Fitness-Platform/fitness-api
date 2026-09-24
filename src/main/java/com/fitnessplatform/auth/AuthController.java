@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Duration;
 import java.util.UUID;
 
 @RestController
@@ -80,5 +81,21 @@ public class AuthController {
                 .getAuthenticatedUser(userId);
 
         return MeResponse.from(user);
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout() {
+        ResponseCookie cookie = ResponseCookie
+                .from(cookieName, "")
+                .httpOnly(true)
+                .secure(cookieSecure)
+                .sameSite(cookieSameSite)
+                .path("/")
+                .maxAge(Duration.ZERO)
+                .build();
+
+        return ResponseEntity.noContent()
+                .header(HttpHeaders.SET_COOKIE, cookie.toString())
+                .build();
     }
 }

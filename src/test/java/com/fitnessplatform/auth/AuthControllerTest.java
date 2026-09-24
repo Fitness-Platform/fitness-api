@@ -306,4 +306,60 @@ class AuthControllerTest {
                 )
                 .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    void shouldLogoutAndExpireAuthenticationCookie() throws Exception {
+        mockMvc.perform(post("/api/auth/logout")
+                        .with(csrf()))
+                .andExpect(status().isNoContent())
+                .andExpect(header().string(
+                        HttpHeaders.SET_COOKIE,
+                        containsString("AUTH_TOKEN=")
+                ))
+                .andExpect(header().string(
+                        HttpHeaders.SET_COOKIE,
+                        containsString("Max-Age=0")
+                ))
+                .andExpect(header().string(
+                        HttpHeaders.SET_COOKIE,
+                        containsString("HttpOnly")
+                ))
+                .andExpect(header().string(
+                        HttpHeaders.SET_COOKIE,
+                        containsString("Path=/")
+                ))
+                .andExpect(header().string(
+                        HttpHeaders.SET_COOKIE,
+                        containsString("SameSite=Lax")
+                ));
+    }
+
+    @Test
+    void shouldLogoutWhenAuthenticationTokenIsInvalid() throws Exception {
+        mockMvc.perform(post("/api/auth/logout")
+                        .with(csrf())
+                        .cookie(
+                                new Cookie(
+                                        "AUTH_TOKEN",
+                                        "invalid-token"
+                                )
+                        ))
+                .andExpect(status().isNoContent())
+                .andExpect(header().string(
+                        HttpHeaders.SET_COOKIE,
+                        containsString("AUTH_TOKEN=")
+                ))
+                .andExpect(header().string(
+                        HttpHeaders.SET_COOKIE,
+                        containsString("Max-Age=0")
+                ));
+    }
+
+    @Test
+    void shouldRejectLogoutWithoutCsrf() throws Exception {
+        mockMvc.perform(
+                        post("/api/auth/logout")
+                )
+                .andExpect(status().isForbidden());
+    }
 }
