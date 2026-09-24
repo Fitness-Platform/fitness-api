@@ -105,4 +105,69 @@ class AuthenticationEmailServiceTest {
                         )
         );
     }
+
+    @Test
+    void shouldSendWelcomeEmail() throws Exception {
+        var resendEmails = resend.emails();
+
+        authenticationEmailService.sendWelcomeEmail(
+                "samuel@example.com"
+        );
+
+        ArgumentCaptor<CreateEmailOptions> captor =
+                ArgumentCaptor.forClass(
+                        CreateEmailOptions.class
+                );
+
+        verify(resendEmails)
+                .send(captor.capture());
+
+        CreateEmailOptions email = captor.getValue();
+
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        JsonNode payload =
+                objectMapper.valueToTree(email);
+
+        assertEquals(
+                "Fitness Platform <onboarding@resend.dev>",
+                payload.get("from").asText()
+        );
+
+        assertEquals(
+                "samuel@example.com",
+                payload.get("to").get(0).asText()
+        );
+
+        assertEquals(
+                "Welcome to Fitness Platform",
+                payload.get("subject").asText()
+        );
+
+        String html = payload.get("html").asText();
+
+        assertTrue(
+                html.contains("Welcome to Fitness Platform")
+        );
+
+        assertTrue(
+                html.contains("http://localhost:5173")
+        );
+    }
+
+    @Test
+    void shouldNotPropagateWelcomeEmailFailure() throws Exception {
+        var resendEmails = resend.emails();
+
+        doThrow(mock(ResendException.class))
+                .when(resendEmails)
+                .send(any(CreateEmailOptions.class));
+
+        assertDoesNotThrow(
+                () -> authenticationEmailService
+                        .sendWelcomeEmail(
+                                "samuel@example.com"
+                        )
+        );
+    }
 }

@@ -96,6 +96,11 @@ class AuthControllerTest {
                         user.getPasswordHash()
                 )
         );
+
+        verify(authenticationEmailService)
+                .sendWelcomeEmail(
+                        "samuel@example.com"
+                );
     }
 
     @Test
@@ -164,6 +169,8 @@ class AuthControllerTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.title").value("Email already registered"));
+
+        verifyNoInteractions(authenticationEmailService);
     }
 
     @Test
@@ -194,6 +201,8 @@ class AuthControllerTest {
                                 }
                                 """))
                 .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(authenticationEmailService);
     }
 
     @Test

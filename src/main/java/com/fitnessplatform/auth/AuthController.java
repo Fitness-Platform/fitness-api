@@ -57,9 +57,13 @@ public class AuthController {
     public RegisterResponse register(
             @Valid @RequestBody RegisterRequest request
     ) {
-        return RegisterResponse.from(
-                registrationService.register(request)
+        User user = registrationService.register(request);
+
+        authenticationEmailService.sendWelcomeEmail(
+                user.getEmail()
         );
+
+        return RegisterResponse.from(user);
     }
 
     @PostMapping("/login")

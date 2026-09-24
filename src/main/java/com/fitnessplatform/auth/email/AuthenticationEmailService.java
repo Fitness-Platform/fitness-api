@@ -42,15 +42,18 @@ public class AuthenticationEmailService {
                 .html(buildPasswordResetHtml(resetUrl))
                 .build();
 
-        try {
-            resend.emails().send(email);
+        sendEmail(email, "password reset");
+    }
 
-        } catch (ResendException exception) {
-            log.error(
-                    "Failed to send password reset email",
-                    exception
-            );
-        }
+    public void sendWelcomeEmail(String recipientEmail) {
+        CreateEmailOptions email = CreateEmailOptions.builder()
+                .from(from)
+                .to(recipientEmail)
+                .subject("Welcome to Fitness Platform")
+                .html(buildWelcomeHtml())
+                .build();
+
+        sendEmail(email, "welcome");
     }
 
     private String buildResetUrl(String rawToken) {
@@ -70,5 +73,32 @@ public class AuthenticationEmailService {
                 </p>
                 <p>If you did not request this, you can ignore this email.</p>
                 """.formatted(resetUrl);
+    }
+
+    private String buildWelcomeHtml() {
+        return """
+            <p>Welcome to Fitness Platform!</p>
+            <p>Your account has been created successfully.</p>
+            <p>You can now log in and access the platform.</p>
+            <p>
+                <a href="%s">Open Fitness Platform</a>
+            </p>
+            """.formatted(frontendBaseUrl);
+    }
+
+    private void sendEmail(
+            CreateEmailOptions email,
+            String emailType
+    ) {
+        try {
+            resend.emails().send(email);
+
+        } catch (ResendException exception) {
+            log.error(
+                    "Failed to send {} email",
+                    emailType,
+                    exception
+            );
+        }
     }
 }
