@@ -11,6 +11,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -130,6 +131,41 @@ class AuthenticationServiceTest {
                                 "wrong-password"
                         )
                 )
+        );
+    }
+
+    @Test
+    void shouldReturnAuthenticatedUserById() {
+        UUID userId = UUID.randomUUID();
+
+        User user = new User(
+                "samuel@example.com",
+                "encoded-password",
+                UserRole.USER
+        );
+
+        when(userRepository.findById(userId))
+                .thenReturn(Optional.of(user));
+
+        User result =
+                authenticationService.getAuthenticatedUser(userId);
+
+        assertSame(user, result);
+
+        verify(userRepository).findById(userId);
+    }
+
+    @Test
+    void shouldFailWhenAuthenticatedUserNoLongerExists() {
+        UUID userId = UUID.randomUUID();
+
+        when(userRepository.findById(userId))
+                .thenReturn(Optional.empty());
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> authenticationService
+                        .getAuthenticatedUser(userId)
         );
     }
 }

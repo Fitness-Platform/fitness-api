@@ -4,6 +4,7 @@ import com.fitnessplatform.TestcontainersConfiguration;
 import com.fitnessplatform.user.User;
 import com.fitnessplatform.user.UserRepository;
 import com.fitnessplatform.user.UserRole;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -34,6 +36,9 @@ class AuthControllerTest {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private JwtService jwtService;
 
     @BeforeEach
     void cleanDatabase() {
@@ -230,5 +235,75 @@ class AuthControllerTest {
                             }
                             """))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void shouldReturnAuthenticatedUser() throws Exception {
+        User user = new User(
+                "samuel@example.com",
+                passwordEncoder.encode("StrongPassword123!"),
+                UserRole.USER
+        );
+
+        user = userRepository.saveAndFlush(user);
+
+        String token = jwtService.generateToken(user.getId());
+
+        mockMvc.perform(
+                        get("/api/auth/me")
+                                .cookie(
+                                        new Cookie(
+                                                "AUTH_TOKEN",
+                                                token
+                                        )
+                                )
+                )
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath("$.id")
+                                .value(user.getId().toString())
+                )
+                .andExpect(
+                        jsonPath("$.email")
+                                .value("samuel@example.com")
+                )
+                .andExpect(
+                        jsonPath("$.role")
+                                .value("USER")
+                )
+                .andExpect(
+                        jsonPath("$.password")
+                                .doesNotExist()
+                )
+                .andExpect(
+                        jsonPath("$.passwordHash")
+                                .doesNotExist()
+                );
+    }
+
+    @Test
+    void shouldReturnUnauthorizedWhenAuthenticationCookieIsMissing()
+            throws Exception {
+
+        mockMvc.perform(
+                        get("/api/auth/me")
+                )
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void shouldReturnUnauthorizedWhenAuthenticationTokenIsInvalid()
+            throws Exception {
+
+        mockMvc.perform(
+                        get("/api/auth/me")
+                                .cookie(
+                                        new Cookie(
+                                                "AUTH_TOKEN",
+                                                "invalid-token"
+                                        )
+                                )
+                )
+                .andExpect(status().isUnauthorized());
     }
 }

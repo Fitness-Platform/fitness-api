@@ -6,6 +6,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.Locale;
+import java.util.UUID;
 
 @Service
 public class AuthenticationService {
@@ -35,6 +36,15 @@ public class AuthenticationService {
         }
 
         return user;
+    }
+
+    public User getAuthenticatedUser(UUID userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() ->
+                        new IllegalStateException(
+                                "Authenticated user no longer exists"
+                        )
+                );
     }
 
     private String normalizeEmail(String email) {

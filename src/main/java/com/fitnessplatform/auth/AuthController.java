@@ -7,7 +7,10 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -67,5 +70,15 @@ public class AuthController {
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, cookie.toString())
                 .body(LoginResponse.from(user));
+    }
+
+    @GetMapping("/me")
+    public MeResponse me(Authentication authentication) {
+        UUID userId = (UUID) authentication.getPrincipal();
+
+        User user = authenticationService
+                .getAuthenticatedUser(userId);
+
+        return MeResponse.from(user);
     }
 }
