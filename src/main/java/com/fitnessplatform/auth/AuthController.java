@@ -1,5 +1,6 @@
 package com.fitnessplatform.auth;
 
+import com.fitnessplatform.auth.email.AuthenticationEmailService;
 import com.fitnessplatform.auth.passwordreset.ForgotPasswordRequest;
 import com.fitnessplatform.auth.passwordreset.PasswordResetService;
 import com.fitnessplatform.auth.passwordreset.ResetPasswordRequest;
@@ -29,12 +30,14 @@ public class AuthController {
     private final String cookieSameSite;
 
     private final PasswordResetService passwordResetService;
+    private final AuthenticationEmailService authenticationEmailService;
 
     public AuthController(
             RegistrationService registrationService,
             AuthenticationService authenticationService,
             JwtService jwtService,
             PasswordResetService passwordResetService,
+            AuthenticationEmailService authenticationEmailService,
             @Value("${security.auth.cookie.name}") String cookieName,
             @Value("${security.auth.cookie.secure}") boolean cookieSecure,
             @Value("${security.auth.cookie.same-site}") String cookieSameSite
@@ -43,6 +46,7 @@ public class AuthController {
         this.authenticationService = authenticationService;
         this.jwtService = jwtService;
         this.passwordResetService = passwordResetService;
+        this.authenticationEmailService = authenticationEmailService;
         this.cookieName = cookieName;
         this.cookieSecure = cookieSecure;
         this.cookieSameSite = cookieSameSite;
@@ -53,9 +57,13 @@ public class AuthController {
     public RegisterResponse register(
             @Valid @RequestBody RegisterRequest request
     ) {
-        return RegisterResponse.from(
-                registrationService.register(request)
+        User user = registrationService.register(request);
+
+        authenticationEmailService.sendWelcomeEmail(
+                user.getEmail()
         );
+
+        return RegisterResponse.from(user);
     }
 
     @PostMapping("/login")
@@ -111,7 +119,15 @@ public class AuthController {
     public void forgotPassword(
             @Valid @RequestBody ForgotPasswordRequest request
     ) {
-        passwordResetService.requestReset(request.email());
+        passwordResetService
+                .requestReset(request.email())
+                .ifPresent(result ->
+                        authenticationEmailService
+                                .sendPasswordResetEmail(
+                                        result.recipientEmail(),
+                                        result.rawToken()
+                                )
+                );
     }
 
     @PostMapping("/reset-password")

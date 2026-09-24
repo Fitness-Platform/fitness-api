@@ -1,8 +1,8 @@
 package com.fitnessplatform.auth;
 
 import com.fitnessplatform.TestcontainersConfiguration;
+import com.fitnessplatform.auth.email.AuthenticationEmailService;
 import com.fitnessplatform.auth.passwordreset.PasswordResetService;
-import com.fitnessplatform.auth.passwordreset.PasswordResetToken;
 import com.fitnessplatform.auth.passwordreset.PasswordResetTokenRepository;
 import com.fitnessplatform.user.User;
 import com.fitnessplatform.user.UserRepository;
@@ -17,12 +17,14 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.time.Instant;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -47,6 +49,9 @@ class AuthControllerTest {
 
     @Autowired
     private PasswordResetService passwordResetService;
+
+    @MockitoBean
+    private AuthenticationEmailService authenticationEmailService;
 
     @Autowired
     private JwtService jwtService;
@@ -91,6 +96,11 @@ class AuthControllerTest {
                         user.getPasswordHash()
                 )
         );
+
+        verify(authenticationEmailService)
+                .sendWelcomeEmail(
+                        "samuel@example.com"
+                );
     }
 
     @Test
@@ -159,6 +169,8 @@ class AuthControllerTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.title").value("Email already registered"));
+
+        verifyNoInteractions(authenticationEmailService);
     }
 
     @Test
@@ -189,6 +201,8 @@ class AuthControllerTest {
                                 }
                                 """))
                 .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(authenticationEmailService);
     }
 
     @Test
@@ -398,6 +412,14 @@ class AuthControllerTest {
                                     """)
                 )
                 .andExpect(status().isAccepted());
+
+        verify(authenticationEmailService)
+                .sendPasswordResetEmail(
+                        eq("samuel@example.com"),
+                        argThat(token ->
+                                token != null && !token.isBlank()
+                        )
+                );
     }
 
     @Test
@@ -415,6 +437,8 @@ class AuthControllerTest {
                                     """)
                 )
                 .andExpect(status().isAccepted());
+
+        verifyNoInteractions(authenticationEmailService);
     }
 
     @Test
@@ -428,9 +452,10 @@ class AuthControllerTest {
         userRepository.saveAndFlush(user);
 
         String rawToken =
-                passwordResetService.requestReset(
-                        "samuel@example.com"
-                );
+                passwordResetService
+                        .requestReset("samuel@example.com")
+                        .orElseThrow()
+                        .rawToken();
 
         mockMvc.perform(
                         post("/api/auth/reset-password")
@@ -477,9 +502,10 @@ class AuthControllerTest {
         userRepository.saveAndFlush(user);
 
         String rawToken =
-                passwordResetService.requestReset(
-                        "samuel@example.com"
-                );
+                passwordResetService
+                        .requestReset("samuel@example.com")
+                        .orElseThrow()
+                        .rawToken();
 
         String requestBody = """
             {
@@ -545,9 +571,10 @@ class AuthControllerTest {
         userRepository.saveAndFlush(user);
 
         String rawToken =
-                passwordResetService.requestReset(
-                        "samuel@example.com"
-                );
+                passwordResetService
+                        .requestReset("samuel@example.com")
+                        .orElseThrow()
+                        .rawToken();
 
         mockMvc.perform(
                         post("/api/auth/reset-password")
@@ -619,14 +646,16 @@ class AuthControllerTest {
         userRepository.saveAndFlush(user);
 
         String firstToken =
-                passwordResetService.requestReset(
-                        "samuel@example.com"
-                );
+                passwordResetService
+                        .requestReset("samuel@example.com")
+                        .orElseThrow()
+                        .rawToken();
 
         String secondToken =
-                passwordResetService.requestReset(
-                        "samuel@example.com"
-                );
+                passwordResetService
+                        .requestReset("samuel@example.com")
+                        .orElseThrow()
+                        .rawToken();
 
         mockMvc.perform(
                         post("/api/auth/reset-password")

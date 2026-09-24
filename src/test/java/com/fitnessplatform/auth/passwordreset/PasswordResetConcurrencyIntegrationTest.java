@@ -56,9 +56,10 @@ class PasswordResetConcurrencyIntegrationTest {
         userRepository.saveAndFlush(user);
 
         String rawToken =
-                passwordResetService.requestReset(
-                        "samuel@example.com"
-                );
+                passwordResetService
+                        .requestReset("samuel@example.com")
+                        .orElseThrow()
+                        .rawToken();
 
         assertNotNull(rawToken);
 
