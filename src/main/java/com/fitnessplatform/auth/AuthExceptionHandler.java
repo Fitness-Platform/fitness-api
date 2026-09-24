@@ -21,4 +21,18 @@ public class AuthExceptionHandler {
 
         return problem;
     }
+
+    @ExceptionHandler(InvalidCredentialsException.class)
+    ProblemDetail handleInvalidCredentials(
+            InvalidCredentialsException exception
+    ) {
+        ProblemDetail problem = ProblemDetail.forStatus(
+                HttpStatus.UNAUTHORIZED
+        );
+
+        problem.setTitle("Invalid credentials");
+        problem.setDetail(exception.getMessage());
+
+        return problem;
+    }
 }
