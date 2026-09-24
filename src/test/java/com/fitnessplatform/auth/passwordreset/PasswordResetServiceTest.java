@@ -53,9 +53,13 @@ class PasswordResetServiceTest {
         when(userRepository.findByEmail("samuel@example.com"))
                 .thenReturn(Optional.of(user));
 
-        String rawToken = passwordResetService
-                .requestReset("  Samuel@Example.com  ");
+        PasswordResetRequestResult result = passwordResetService
+                .requestReset("  Samuel@Example.com  ")
+                .orElseThrow();
 
+        String rawToken = result.rawToken();
+
+        assertEquals("samuel@example.com", result.recipientEmail());
         assertNotNull(rawToken);
         assertFalse(rawToken.isBlank());
 
@@ -92,10 +96,10 @@ class PasswordResetServiceTest {
         when(userRepository.findByEmail("unknown@example.com"))
                 .thenReturn(Optional.empty());
 
-        String rawToken = passwordResetService
+        Optional<PasswordResetRequestResult> result = passwordResetService
                 .requestReset("unknown@example.com");
 
-        assertNull(rawToken);
+        assertTrue(result.isEmpty());
 
         verifyNoInteractions(tokenRepository);
     }

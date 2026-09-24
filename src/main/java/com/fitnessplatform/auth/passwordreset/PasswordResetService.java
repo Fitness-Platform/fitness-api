@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Locale;
+import java.util.Optional;
 
 @Service
 public class PasswordResetService {
@@ -43,7 +44,9 @@ public class PasswordResetService {
     }
 
     @Transactional
-    public String requestReset(String email) {
+    public Optional<PasswordResetRequestResult> requestReset(
+            String email
+    ) {
         String normalizedEmail = normalizeEmail(email);
 
         User user = userRepository
@@ -51,7 +54,7 @@ public class PasswordResetService {
                 .orElse(null);
 
         if (user == null) {
-            return null;
+            return Optional.empty();
         }
 
         String rawToken = generateToken();
@@ -68,7 +71,12 @@ public class PasswordResetService {
 
         tokenRepository.save(resetToken);
 
-        return rawToken;
+        return Optional.of(
+                new PasswordResetRequestResult(
+                        user.getEmail(),
+                        rawToken
+                )
+        );
     }
 
     @Transactional
