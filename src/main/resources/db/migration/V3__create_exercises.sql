@@ -1,0 +1,9 @@
+CREATE TABLE exercises (
+    id UUID PRIMARY KEY,
+    name VARCHAR(150) NOT NULL,
+    instructions TEXT,
+    equipment VARCHAR(120),
+    video_url VARCHAR(2048),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
