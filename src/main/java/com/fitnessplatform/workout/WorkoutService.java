@@ -1,10 +1,7 @@
 package com.fitnessplatform.workout;
 
-import jakarta.validation.Valid;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.ResponseStatus;
 
 import java.util.List;
 import java.util.UUID;
@@ -22,7 +19,7 @@ public class WorkoutService {
 
     @Transactional
     public Workout create(
-            @Valid @RequestBody WorkoutRequest request
+            WorkoutRequest request
     ) {
         Workout workout = new Workout(
                 request.name().strip(),
