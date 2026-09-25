@@ -151,6 +151,29 @@ POSTGRES_PORT=5432
 
 Use the port configured in your local `.env`.
 
+## Admin Bootstrap
+
+The V1 platform supports two roles:
+
+- `USER`
+- `ADMIN`
+
+Newly registered accounts are always created with the `USER` role. Clients cannot choose or assign an administrative role during registration.
+
+For V1, the initial administrator is promoted operationally after registration.
+
+Example:
+
+```sql
+UPDATE users
+SET role = 'ADMIN'
+WHERE email = '<admin-email>';
+```
+
+This operation must only be performed by an authorized operator with direct database access.
+
+There is no public role-management or admin-promotion API in V1.
+
 ## Database Migrations
 
 Flyway manages database schema evolution.

@@ -241,4 +241,60 @@ class SecurityAuthorizationTest {
                 )
                 .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    void shouldRejectUnauthenticatedAccessToAdminRoutes() throws Exception {
+        mockMvc.perform(
+                        get("/api/admin/non-existing")
+                )
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void shouldRejectUserAccessToAdminRoutes() throws Exception {
+        User user = new User(
+                "user@example.com",
+                passwordEncoder.encode("StrongPassword123!"),
+                UserRole.USER
+        );
+
+        user = userRepository.saveAndFlush(user);
+
+        String token = jwtService.generateToken(user.getId());
+
+        mockMvc.perform(
+                        get("/api/admin/non-existing")
+                                .cookie(
+                                        new Cookie(
+                                                "AUTH_TOKEN",
+                                                token
+                                        )
+                                )
+                )
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void shouldAllowAdminThroughAdminAuthorizationBoundary() throws Exception {
+        User admin = new User(
+                "admin@example.com",
+                passwordEncoder.encode("StrongPassword123!"),
+                UserRole.ADMIN
+        );
+
+        admin = userRepository.saveAndFlush(admin);
+
+        String token = jwtService.generateToken(admin.getId());
+
+        mockMvc.perform(
+                        get("/api/admin/non-existing")
+                                .cookie(
+                                        new Cookie(
+                                                "AUTH_TOKEN",
+                                                token
+                                        )
+                                )
+                )
+                .andExpect(status().isNotFound());
+    }
 }
