@@ -19,7 +19,6 @@ public record WorkoutExerciseUpdateRequest(
         @Digits(integer = 6, fraction = 2)
         BigDecimal suggestedWeightLb,
 
-        @NotNull
         @PositiveOrZero
         Integer restSeconds,
 

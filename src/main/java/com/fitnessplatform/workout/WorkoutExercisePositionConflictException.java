@@ -10,6 +10,7 @@ public class WorkoutExercisePositionConflictException extends RuntimeException {
     ) {
         super(
                 "Position %d is already used in workout %s"
+                        .formatted(position, workoutId)
         );
     }
 }

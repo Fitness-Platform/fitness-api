@@ -706,6 +706,55 @@ class WorkoutExerciseControllerTest {
         );
     }
 
+    @Test
+    void shouldAllowRemovingRestSecondsWhenUpdating()
+            throws Exception {
+
+        Workout workout =
+                createWorkout("Upper Body");
+
+        Exercise exercise =
+                createExercise("Bench Press");
+
+        WorkoutExercise workoutExercise =
+                createWorkoutExercise(
+                        workout,
+                        exercise,
+                        1
+                );
+
+        Cookie adminCookie =
+                authenticatedCookie(UserRole.ADMIN);
+
+        mockMvc.perform(
+                        put(
+                                "/api/admin/workouts/{workoutId}/exercises/{workoutExerciseId}",
+                                workout.getId(),
+                                workoutExercise.getId()
+                        )
+                                .with(csrf())
+                                .cookie(adminCookie)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                    {
+                                      "sets": 3,
+                                      "reps": "10",
+                                      "suggestedWeightLb": 40.00,
+                                      "restSeconds": null,
+                                      "notes": null,
+                                      "position": 1
+                                    }
+                                    """)
+                )
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath("$.restSeconds")
+                                .value(
+                                        org.hamcrest.Matchers.nullValue()
+                                )
+                );
+    }
+
     private Workout createWorkout(
             String name
     ) {
