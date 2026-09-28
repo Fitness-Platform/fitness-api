@@ -22,4 +22,21 @@ public class ExerciseExceptionHandler {
 
         return problem;
     }
+
+    @ExceptionHandler(ExerciseInUseException.class)
+    ProblemDetail handleExerciseInUse(
+            ExerciseInUseException exception
+    ) {
+        ProblemDetail problem =
+                ProblemDetail.forStatusAndDetail(
+                        HttpStatus.CONFLICT,
+                        exception.getMessage()
+                );
+
+        problem.setTitle(
+                "Exercise is in use"
+        );
+
+        return problem;
+    }
 }

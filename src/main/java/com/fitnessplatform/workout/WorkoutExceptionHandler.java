@@ -22,4 +22,40 @@ public class WorkoutExceptionHandler {
 
         return problem;
     }
+
+    @ExceptionHandler(WorkoutExerciseNotFoundException.class)
+    ProblemDetail handleWorkoutExerciseNotFound(
+            WorkoutExerciseNotFoundException exception
+    ) {
+        ProblemDetail problem =
+                ProblemDetail.forStatusAndDetail(
+                        HttpStatus.NOT_FOUND,
+                        exception.getMessage()
+                );
+
+        problem.setTitle(
+                "Workout exercise not found"
+        );
+
+        return problem;
+    }
+
+    @ExceptionHandler(
+            WorkoutExercisePositionConflictException.class
+    )
+    ProblemDetail handleWorkoutExercisePositionConflict(
+            WorkoutExercisePositionConflictException exception
+    ) {
+        ProblemDetail problem =
+                ProblemDetail.forStatusAndDetail(
+                        HttpStatus.CONFLICT,
+                        exception.getMessage()
+                );
+
+        problem.setTitle(
+                "Workout exercise position conflict"
+        );
+
+        return problem;
+    }
 }
