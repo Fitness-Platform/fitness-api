@@ -1,5 +1,6 @@
 package com.fitnessplatform.exercise;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -66,7 +67,15 @@ public class ExerciseService {
     public void delete(UUID exerciseId) {
         Exercise exercise = findById(exerciseId);
 
-        exerciseRepository.delete(exercise);
+        try {
+            exerciseRepository.delete(exercise);
+            exerciseRepository.flush();
+
+        } catch (DataIntegrityViolationException exception) {
+            throw new ExerciseInUseException(
+                    exerciseId
+            );
+        }
     }
 
     private String normalizeNullable(String value) {
