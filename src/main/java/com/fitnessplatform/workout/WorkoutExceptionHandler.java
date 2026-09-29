@@ -58,4 +58,19 @@ public class WorkoutExceptionHandler {
 
         return problem;
     }
+
+    @ExceptionHandler(WorkoutInUseException.class)
+    ProblemDetail handleWorkoutInUse(
+            WorkoutInUseException exception
+    ) {
+        ProblemDetail problem =
+                ProblemDetail.forStatusAndDetail(
+                        HttpStatus.CONFLICT,
+                        exception.getMessage()
+                );
+
+        problem.setTitle("Workout is in use");
+
+        return problem;
+    }
 }
