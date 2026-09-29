@@ -19,8 +19,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -752,6 +751,138 @@ class ProgramWeekControllerTest {
 
         assertTrue(
                 programWeekRepository.findAll().isEmpty()
+        );
+    }
+
+    @Test
+    void shouldRejectUpdatingWeekThroughDifferentProgram()
+            throws Exception {
+
+        Program programA =
+                programRepository.saveAndFlush(
+                        new Program(
+                                "Program A",
+                                null
+                        )
+                );
+
+        Program programB =
+                programRepository.saveAndFlush(
+                        new Program(
+                                "Program B",
+                                null
+                        )
+                );
+
+        ProgramWeek week =
+                programWeekRepository.saveAndFlush(
+                        new ProgramWeek(
+                                programA,
+                                "Original Week",
+                                "Original description",
+                                1
+                        )
+                );
+
+        Cookie adminCookie =
+                authenticatedCookie(UserRole.ADMIN);
+
+        mockMvc.perform(
+                        put(
+                                "/api/admin/programs/{programId}/weeks/{weekId}",
+                                programB.getId(),
+                                week.getId()
+                        )
+                                .with(csrf())
+                                .cookie(adminCookie)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                    {
+                                      "title": "Modified Week",
+                                      "description": "Modified description",
+                                      "position": 2
+                                    }
+                                    """)
+                )
+                .andExpect(status().isNotFound())
+                .andExpect(
+                        jsonPath("$.title")
+                                .value("Program week not found")
+                );
+
+        ProgramWeek persisted =
+                programWeekRepository
+                        .findById(week.getId())
+                        .orElseThrow();
+
+        assertEquals(
+                "Original Week",
+                persisted.getTitle()
+        );
+
+        assertEquals(
+                "Original description",
+                persisted.getDescription()
+        );
+
+        assertEquals(
+                1,
+                persisted.getPosition()
+        );
+    }
+
+    @Test
+    void shouldRejectDeletingWeekThroughDifferentProgram()
+            throws Exception {
+
+        Program programA =
+                programRepository.saveAndFlush(
+                        new Program(
+                                "Program A",
+                                null
+                        )
+                );
+
+        Program programB =
+                programRepository.saveAndFlush(
+                        new Program(
+                                "Program B",
+                                null
+                        )
+                );
+
+        ProgramWeek week =
+                programWeekRepository.saveAndFlush(
+                        new ProgramWeek(
+                                programA,
+                                "Week 1",
+                                null,
+                                1
+                        )
+                );
+
+        Cookie adminCookie =
+                authenticatedCookie(UserRole.ADMIN);
+
+        mockMvc.perform(
+                        delete(
+                                "/api/admin/programs/{programId}/weeks/{weekId}",
+                                programB.getId(),
+                                week.getId()
+                        )
+                                .with(csrf())
+                                .cookie(adminCookie)
+                )
+                .andExpect(status().isNotFound())
+                .andExpect(
+                        jsonPath("$.title")
+                                .value("Program week not found")
+                );
+
+        assertTrue(
+                programWeekRepository.existsById(
+                        week.getId()
+                )
         );
     }
 
