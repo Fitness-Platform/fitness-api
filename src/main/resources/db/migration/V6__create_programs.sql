@@ -1,0 +1,11 @@
+CREATE TABLE programs (
+    id UUID PRIMARY KEY,
+    name VARCHAR(150) NOT NULL,
+    description TEXT,
+    status VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT chk_programs_status
+        CHECK (status IN ('DRAFT', 'PUBLISHED'))
+);
