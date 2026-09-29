@@ -22,4 +22,34 @@ public class ProgramExceptionHandler {
 
         return problem;
     }
+
+    @ExceptionHandler(ProgramWeekNotFoundException.class)
+    ProblemDetail handleProgramWeekNotFound(
+            ProgramWeekNotFoundException exception
+    ) {
+        ProblemDetail problem =
+                ProblemDetail.forStatusAndDetail(
+                        HttpStatus.NOT_FOUND,
+                        exception.getMessage()
+                );
+
+        problem.setTitle("Program week not found");
+
+        return problem;
+    }
+
+    @ExceptionHandler(ProgramWeekPositionConflictException.class)
+    ProblemDetail handleProgramWeekConflict(
+            ProgramWeekPositionConflictException exception
+    ) {
+        ProblemDetail problem =
+                ProblemDetail.forStatusAndDetail(
+                        HttpStatus.CONFLICT,
+                        exception.getMessage()
+                );
+
+        problem.setTitle("Program week position conflict");
+
+        return problem;
+    }
 }
