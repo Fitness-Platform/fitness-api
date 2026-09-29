@@ -52,4 +52,42 @@ public class ProgramExceptionHandler {
 
         return problem;
     }
+
+    @ExceptionHandler(
+            ProgramWeekWorkoutNotFoundException.class
+    )
+    ProblemDetail handleProgramWeekWorkoutNotFound(
+            ProgramWeekWorkoutNotFoundException exception
+    ) {
+        ProblemDetail problem =
+                ProblemDetail.forStatusAndDetail(
+                        HttpStatus.NOT_FOUND,
+                        exception.getMessage()
+                );
+
+        problem.setTitle(
+                "Program week workout not found"
+        );
+
+        return problem;
+    }
+
+    @ExceptionHandler(
+            ProgramWeekWorkoutPositionConflictException.class
+    )
+    ProblemDetail handleProgramWeekWorkoutPositionConflict(
+            ProgramWeekWorkoutPositionConflictException exception
+    ) {
+        ProblemDetail problem =
+                ProblemDetail.forStatusAndDetail(
+                        HttpStatus.CONFLICT,
+                        exception.getMessage()
+                );
+
+        problem.setTitle(
+                "Program week workout position conflict"
+        );
+
+        return problem;
+    }
 }
