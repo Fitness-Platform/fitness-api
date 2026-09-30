@@ -8,6 +8,9 @@ import java.util.UUID;
 public interface ProgramAccessRepository extends JpaRepository<ProgramAccess, UUID> {
 
     List<ProgramAccess>
+    findAllByOrderByCreatedAtDesc();
+
+    List<ProgramAccess>
     findAllByUserIdOrderByCreatedAtDesc(
             UUID userId
     );
