@@ -1014,4 +1014,150 @@ class ProgramContentIntegrationTest {
                 )
         );
     }
+
+    @Test
+    @Transactional
+    void shouldReuseSameExerciseAcrossWorkoutsWithIndependentConfiguration() {
+
+        Exercise exercise =
+                exerciseRepository.saveAndFlush(
+                        new Exercise(
+                                "Bench Press",
+                                "Lower the bar under control.",
+                                "Barbell",
+                                "https://example.com/bench-press"
+                        )
+                );
+
+        Workout strengthWorkout =
+                workoutRepository.saveAndFlush(
+                        new Workout(
+                                "Strength Workout",
+                                null
+                        )
+                );
+
+        Workout hypertrophyWorkout =
+                workoutRepository.saveAndFlush(
+                        new Workout(
+                                "Hypertrophy Workout",
+                                null
+                        )
+                );
+
+        WorkoutExercise strengthConfiguration =
+                workoutExerciseRepository.saveAndFlush(
+                        new WorkoutExercise(
+                                strengthWorkout,
+                                exercise,
+                                4,
+                                "8-10",
+                                new BigDecimal("135.00"),
+                                120,
+                                "Strength focus.",
+                                1
+                        )
+                );
+
+        WorkoutExercise hypertrophyConfiguration =
+                workoutExerciseRepository.saveAndFlush(
+                        new WorkoutExercise(
+                                hypertrophyWorkout,
+                                exercise,
+                                3,
+                                "12",
+                                new BigDecimal("95.00"),
+                                60,
+                                "Hypertrophy focus.",
+                                1
+                        )
+                );
+
+        UUID exerciseId = exercise.getId();
+
+        entityManager.clear();
+
+        List<WorkoutExercise> strengthExercises =
+                workoutExerciseRepository
+                        .findAllByWorkoutIdOrderByPositionAsc(
+                                strengthWorkout.getId()
+                        );
+
+        List<WorkoutExercise> hypertrophyExercises =
+                workoutExerciseRepository
+                        .findAllByWorkoutIdOrderByPositionAsc(
+                                hypertrophyWorkout.getId()
+                        );
+
+        assertEquals(
+                1,
+                strengthExercises.size()
+        );
+
+        assertEquals(
+                1,
+                hypertrophyExercises.size()
+        );
+
+        WorkoutExercise persistedStrength =
+                strengthExercises.getFirst();
+
+        WorkoutExercise persistedHypertrophy =
+                hypertrophyExercises.getFirst();
+
+        // Same reusable Exercise
+        assertEquals(
+                exerciseId,
+                persistedStrength.getExercise().getId()
+        );
+
+        assertEquals(
+                exerciseId,
+                persistedHypertrophy.getExercise().getId()
+        );
+
+        // Different WorkoutExercise associations
+        assertFalse(
+                persistedStrength.getId()
+                        .equals(persistedHypertrophy.getId())
+        );
+
+        // Strength configuration
+        assertEquals(
+                4,
+                persistedStrength.getSets()
+        );
+
+        assertEquals(
+                "8-10",
+                persistedStrength.getReps()
+        );
+
+        assertEquals(
+                0,
+                new BigDecimal("135.00")
+                        .compareTo(
+                                persistedStrength.getSuggestedWeightLb()
+                        )
+        );
+
+        // Hypertrophy configuration
+        assertEquals(
+                3,
+                persistedHypertrophy.getSets()
+        );
+
+        assertEquals(
+                "12",
+                persistedHypertrophy.getReps()
+        );
+
+        assertEquals(
+                0,
+                new BigDecimal("95.00")
+                        .compareTo(
+                                persistedHypertrophy.getSuggestedWeightLb()
+                        )
+        );
+    }
 }
