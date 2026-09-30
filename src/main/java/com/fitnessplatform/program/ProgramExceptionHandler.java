@@ -90,4 +90,42 @@ public class ProgramExceptionHandler {
 
         return problem;
     }
+
+    @ExceptionHandler(
+            ProgramResourceNotFoundException.class
+    )
+    ProblemDetail handleProgramResourceNotFound(
+            ProgramResourceNotFoundException exception
+    ) {
+        ProblemDetail problem =
+                ProblemDetail.forStatusAndDetail(
+                        HttpStatus.NOT_FOUND,
+                        exception.getMessage()
+                );
+
+        problem.setTitle(
+                "Program resource not found"
+        );
+
+        return problem;
+    }
+
+    @ExceptionHandler(
+            ProgramResourcePositionConflictException.class
+    )
+    ProblemDetail handleProgramResourcePositionConflict(
+            ProgramResourcePositionConflictException exception
+    ) {
+        ProblemDetail problem =
+                ProblemDetail.forStatusAndDetail(
+                        HttpStatus.CONFLICT,
+                        exception.getMessage()
+                );
+
+        problem.setTitle(
+                "Program resource position conflict"
+        );
+
+        return problem;
+    }
 }
