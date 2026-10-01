@@ -2,6 +2,7 @@ package com.fitnessplatform.program;
 
 import com.fitnessplatform.access.ProgramAccess;
 import com.fitnessplatform.access.ProgramAccessAuthorizationService;
+import com.fitnessplatform.access.ProgramAccessDeniedException;
 import com.fitnessplatform.workout.WorkoutExercise;
 import com.fitnessplatform.workout.WorkoutExerciseRepository;
 import org.springframework.stereotype.Service;
@@ -63,10 +64,13 @@ public class MemberProgramService {
         return programAccessAuthorizationService
                 .findActiveAccesses(userId)
                 .stream()
-                .map(
+                .filter(
                         access ->
-                                MemberProgramSummaryResponse
-                                        .from(access)
+                                access.getProgram().getStatus()
+                                        == ProgramStatus.PUBLISHED
+                )
+                .map(
+                        MemberProgramSummaryResponse::from
                 )
                 .toList();
     }
@@ -77,11 +81,10 @@ public class MemberProgramService {
             UUID programId
     ) {
         ProgramAccess access =
-                programAccessAuthorizationService
-                        .requireActiveAccess(
-                                userId,
-                                programId
-                        );
+                requirePublishedProgramAccess(
+                        userId,
+                        programId
+                );
 
         List<ProgramWeek> weeks =
                 programWeekRepository
@@ -108,11 +111,10 @@ public class MemberProgramService {
             UUID programId,
             UUID programWeekId
     ) {
-        programAccessAuthorizationService
-                .requireActiveAccess(
-                        userId,
-                        programId
-                );
+        requirePublishedProgramAccess(
+                userId,
+                programId
+        );
 
         ProgramWeek week =
                 programWeekRepository
@@ -146,11 +148,10 @@ public class MemberProgramService {
             UUID programWeekId,
             UUID programWeekWorkoutId
     ) {
-        programAccessAuthorizationService
-                .requireActiveAccess(
-                        userId,
-                        programId
-                );
+        requirePublishedProgramAccess(
+                userId,
+                programId
+        );
 
         programWeekRepository
                 .findByIdAndProgramId(
@@ -189,9 +190,28 @@ public class MemberProgramService {
                 association,
                 exercises
         );
-
-
     }
 
+    private ProgramAccess requirePublishedProgramAccess(
+            UUID userId,
+            UUID programId
+    ) {
+        ProgramAccess access =
+                programAccessAuthorizationService
+                        .requireActiveAccess(
+                                userId,
+                                programId
+                        );
 
+        if (
+                access.getProgram().getStatus()
+                        != ProgramStatus.PUBLISHED
+        ) {
+            throw new ProgramAccessDeniedException(
+                    programId
+            );
+        }
+
+        return access;
+    }
 }

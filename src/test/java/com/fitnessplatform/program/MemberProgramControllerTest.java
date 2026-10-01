@@ -2129,6 +2129,131 @@ class MemberProgramControllerTest {
                 );
     }
 
+    @Test
+    void shouldNotListDraftProgramWithActiveAccess()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createDraftProgram(
+                        "Draft Program",
+                        null
+                );
+
+        createAccess(
+                member,
+                program,
+                Instant.parse(
+                        "2026-09-01T12:00:00Z"
+                ),
+                null
+        );
+
+        mockMvc.perform(
+                        get("/api/me/programs")
+                                .cookie(
+                                        authenticatedCookie(
+                                                member
+                                        )
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        jsonPath("$.length()")
+                                .value(0)
+                );
+    }
+
+    @Test
+    void shouldRejectDraftProgramWithActiveAccess()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createDraftProgram(
+                        "Draft Program",
+                        null
+                );
+
+        createAccess(
+                member,
+                program,
+                Instant.parse(
+                        "2026-09-01T12:00:00Z"
+                ),
+                null
+        );
+
+        mockMvc.perform(
+                        get(
+                                "/api/me/programs/{programId}",
+                                program.getId()
+                        )
+                                .cookie(
+                                        authenticatedCookie(
+                                                member
+                                        )
+                                )
+                )
+                .andExpect(
+                        status().isForbidden()
+                )
+                .andExpect(
+                        jsonPath("$.title")
+                                .value(
+                                        "Program access denied"
+                                )
+                );
+    }
+
+    @Test
+    void shouldRejectAdminWithoutProgramAccess()
+            throws Exception {
+
+        User admin =
+                createUser(
+                        "admin@example.com",
+                        UserRole.ADMIN
+                );
+
+        Program program =
+                createProgram(
+                        "Published Program",
+                        null
+                );
+
+        mockMvc.perform(
+                        get(
+                                "/api/me/programs/{programId}",
+                                program.getId()
+                        )
+                                .cookie(
+                                        authenticatedCookie(
+                                                admin
+                                        )
+                                )
+                )
+                .andExpect(
+                        status().isForbidden()
+                )
+                .andExpect(
+                        jsonPath("$.title")
+                                .value(
+                                        "Program access denied"
+                                )
+                );
+    }
+
     private Exercise createExercise(
             String name,
             String instructions,
@@ -2207,13 +2332,23 @@ class MemberProgramControllerTest {
     private User createUser(
             String email
     ) {
+        return createUser(
+                email,
+                UserRole.USER
+        );
+    }
+
+    private User createUser(
+            String email,
+            UserRole role
+    ) {
         return userRepository.saveAndFlush(
                 new User(
                         email,
                         passwordEncoder.encode(
                                 "StrongPassword123!"
                         ),
-                        UserRole.USER
+                        role
                 )
         );
     }
@@ -2288,5 +2423,17 @@ class MemberProgramControllerTest {
                                 position
                         )
                 );
+    }
+
+    private Program createDraftProgram(
+            String name,
+            String description
+    ) {
+        return programRepository.saveAndFlush(
+                new Program(
+                        name,
+                        description
+                )
+        );
     }
 }

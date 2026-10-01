@@ -13,13 +13,14 @@ import java.util.UUID;
 @RequestMapping("/api/me/programs")
 public class MemberProgramController {
 
-    private final MemberProgramService memberProgramService;
+    private final MemberProgramService
+            memberProgramService;
 
     public MemberProgramController(
-            MemberProgramService
-                memberProgramService
+            MemberProgramService memberProgramService
     ) {
-        this.memberProgramService = memberProgramService;
+        this.memberProgramService =
+                memberProgramService;
     }
 
     @GetMapping
@@ -30,7 +31,9 @@ public class MemberProgramController {
                 (UUID) authentication.getPrincipal();
 
         return memberProgramService
-                .findMyPrograms(userId);
+                .findMyPrograms(
+                        userId
+                );
     }
 
     @GetMapping("/{programId}")
@@ -48,7 +51,9 @@ public class MemberProgramController {
                 );
     }
 
-    @GetMapping("/{programId}/weeks/{programWeekId}")
+    @GetMapping(
+            "/{programId}/weeks/{programWeekId}"
+    )
     public MemberProgramWeekDetailResponse findMyProgramWeek(
             @PathVariable UUID programId,
             @PathVariable UUID programWeekId,
@@ -65,7 +70,9 @@ public class MemberProgramController {
                 );
     }
 
-    @GetMapping("/{programId}/weeks/{programWeekId}/workouts/{programWeekWorkoutId}")
+    @GetMapping(
+            "/{programId}/weeks/{programWeekId}/workouts/{programWeekWorkoutId}"
+    )
     public MemberProgramWorkoutDetailResponse findMyProgramWorkout(
             @PathVariable UUID programId,
             @PathVariable UUID programWeekId,
@@ -75,7 +82,7 @@ public class MemberProgramController {
         UUID userId =
                 (UUID) authentication.getPrincipal();
 
-        return  memberProgramService
+        return memberProgramService
                 .findMyProgramWorkout(
                         userId,
                         programId,
