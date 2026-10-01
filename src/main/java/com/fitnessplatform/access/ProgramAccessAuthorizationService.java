@@ -5,8 +5,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 @Service
 public class ProgramAccessAuthorizationService {
@@ -66,5 +65,32 @@ public class ProgramAccessAuthorizationService {
                                 programId
                         )
                 );
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProgramAccess> findActiveAccesses(
+            UUID userId
+    ) {
+        Instant now =
+                clock.instant();
+
+        Map<UUID, ProgramAccess> accessesByProgram =
+                new LinkedHashMap<>();
+
+        programAccessRepository
+                .findActiveAccessesByUser(
+                        userId,
+                        now
+                )
+                .forEach(access ->
+                        accessesByProgram.putIfAbsent(
+                                access.getProgram().getId(),
+                                access
+                        )
+                );
+
+        return List.copyOf(
+                accessesByProgram.values()
+        );
     }
 }

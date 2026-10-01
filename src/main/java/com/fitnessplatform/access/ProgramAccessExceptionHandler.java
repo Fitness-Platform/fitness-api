@@ -43,4 +43,21 @@ public class ProgramAccessExceptionHandler{
 
         return problem;
     }
+
+    @ExceptionHandler(
+            ProgramAccessDeniedException.class
+    )
+    ProblemDetail handleProgramAccessDenied(
+            ProgramAccessDeniedException exception
+    ) {
+        ProblemDetail problem =
+                ProblemDetail.forStatusAndDetail(
+                        HttpStatus.FORBIDDEN,
+                        exception.getMessage()
+                );
+
+        problem.setTitle("Program access denied");
+
+        return problem;
+    }
 }
