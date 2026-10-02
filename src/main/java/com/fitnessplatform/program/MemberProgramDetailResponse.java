@@ -15,10 +15,11 @@ public record MemberProgramDetailResponse(
         List<MemberProgramResourceResponse> resources,
         List<MemberProgramWeekResponse> weeks
 ) {
+
     public static MemberProgramDetailResponse from(
             ProgramAccess access,
             List<ProgramResource> resources,
-            List<ProgramWeek> weeks
+            List<MemberProgramWeekResponse> weeks
     ) {
         Program program =
                 access.getProgram();
@@ -34,11 +35,7 @@ public record MemberProgramDetailResponse(
                                 MemberProgramResourceResponse::from
                         )
                         .toList(),
-                weeks.stream()
-                        .map(
-                                MemberProgramWeekResponse::from
-                        )
-                        .toList()
+                weeks
         );
     }
 }

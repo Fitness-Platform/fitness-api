@@ -128,4 +128,26 @@ public class ProgramExceptionHandler {
 
         return problem;
     }
+
+    @ExceptionHandler(
+            ProgramWeekLockedException.class
+    )
+    ProblemDetail handleProgramWeekLocked(
+            ProgramWeekLockedException exception
+    ) {
+        ProblemDetail problem =
+                ProblemDetail.forStatusAndDetail(
+                        HttpStatus.FORBIDDEN,
+                        exception.getMessage()
+                );
+
+        problem.setTitle("Program week locked");
+
+        problem.setProperty(
+                "unlocksAt",
+                exception.getUnlocksAt()
+        );
+
+        return problem;
+    }
 }

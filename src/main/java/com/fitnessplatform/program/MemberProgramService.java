@@ -8,6 +8,7 @@ import com.fitnessplatform.workout.WorkoutExerciseRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -29,6 +30,9 @@ public class MemberProgramService {
     private final WorkoutExerciseRepository
             workoutExerciseRepository;
 
+    private final ProgramWeekUnlockService
+            programWeekUnlockService;
+
     public MemberProgramService(
             ProgramAccessAuthorizationService
                     programAccessAuthorizationService,
@@ -39,7 +43,9 @@ public class MemberProgramService {
             ProgramWeekWorkoutRepository
                     programWeekWorkoutRepository,
             WorkoutExerciseRepository
-                    workoutExerciseRepository
+                    workoutExerciseRepository,
+            ProgramWeekUnlockService
+                    programWeekUnlockService
     ) {
         this.programAccessAuthorizationService =
                 programAccessAuthorizationService;
@@ -55,6 +61,9 @@ public class MemberProgramService {
 
         this.workoutExerciseRepository =
                 workoutExerciseRepository;
+
+        this.programWeekUnlockService =
+                programWeekUnlockService;
     }
 
     @Transactional(readOnly = true)
@@ -98,10 +107,38 @@ public class MemberProgramService {
                                 programId
                         );
 
+        List<MemberProgramWeekResponse> weekResponses =
+                weeks.stream()
+                        .map(
+                                week -> {
+                                    Instant unlocksAt =
+                                            programWeekUnlockService
+                                                    .calculateUnlocksAt(
+                                                            access,
+                                                            week
+                                                    );
+
+                                    boolean unlocked =
+                                            programWeekUnlockService
+                                                    .isUnlocked(
+                                                            access,
+                                                            week
+                                                    );
+
+                                    return MemberProgramWeekResponse
+                                            .from(
+                                                    week,
+                                                    unlocked,
+                                                    unlocksAt
+                                            );
+                                }
+                        )
+                        .toList();
+
         return MemberProgramDetailResponse.from(
                 access,
                 resources,
-                weeks
+                weekResponses
         );
     }
 
@@ -111,10 +148,11 @@ public class MemberProgramService {
             UUID programId,
             UUID programWeekId
     ) {
-        requirePublishedProgramAccess(
-                userId,
-                programId
-        );
+        ProgramAccess access =
+                requirePublishedProgramAccess(
+                        userId,
+                        programId
+                );
 
         ProgramWeek week =
                 programWeekRepository
@@ -128,6 +166,12 @@ public class MemberProgramService {
                                                 programWeekId
                                         )
                         );
+
+        programWeekUnlockService
+                .requireUnlocked(
+                        access,
+                        week
+                );
 
         List<ProgramWeekWorkout> workouts =
                 programWeekWorkoutRepository
@@ -148,21 +192,29 @@ public class MemberProgramService {
             UUID programWeekId,
             UUID programWeekWorkoutId
     ) {
-        requirePublishedProgramAccess(
-                userId,
-                programId
-        );
-
-        programWeekRepository
-                .findByIdAndProgramId(
-                        programWeekId,
+        ProgramAccess access =
+                requirePublishedProgramAccess(
+                        userId,
                         programId
-                )
-                .orElseThrow(
-                        () ->
-                                new ProgramWeekNotFoundException(
-                                        programWeekId
-                                )
+                );
+
+        ProgramWeek week =
+                programWeekRepository
+                        .findByIdAndProgramId(
+                                programWeekId,
+                                programId
+                        )
+                        .orElseThrow(
+                                () ->
+                                        new ProgramWeekNotFoundException(
+                                                programWeekId
+                                        )
+                        );
+
+        programWeekUnlockService
+                .requireUnlocked(
+                        access,
+                        week
                 );
 
         ProgramWeekWorkout association =
