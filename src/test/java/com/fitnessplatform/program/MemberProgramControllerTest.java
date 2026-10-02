@@ -2254,6 +2254,364 @@ class MemberProgramControllerTest {
                 );
     }
 
+    @Test
+    void shouldExposeWeekUnlockStatusAndDate()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        createWeek(
+                program,
+                "Week 1",
+                1
+        );
+
+        createWeek(
+                program,
+                "Week 2",
+                2
+        );
+
+        createWeek(
+                program,
+                "Week 3",
+                3
+        );
+
+        createAccess(
+                member,
+                program,
+                Instant.parse(
+                        "2026-10-01T12:00:00Z"
+                ),
+                null
+        );
+
+        mockMvc.perform(
+                        get(
+                                "/api/me/programs/{programId}",
+                                program.getId()
+                        )
+                                .cookie(
+                                        authenticatedCookie(
+                                                member
+                                        )
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        jsonPath("$.weeks[0].position")
+                                .value(1)
+                )
+                .andExpect(
+                        jsonPath("$.weeks[0].unlocked")
+                                .value(true)
+                )
+                .andExpect(
+                        jsonPath("$.weeks[0].unlocksAt")
+                                .value(
+                                        "2026-10-01T12:00:00Z"
+                                )
+                )
+                .andExpect(
+                        jsonPath("$.weeks[1].position")
+                                .value(2)
+                )
+                .andExpect(
+                        jsonPath("$.weeks[1].unlocked")
+                                .value(false)
+                )
+                .andExpect(
+                        jsonPath("$.weeks[1].unlocksAt")
+                                .value(
+                                        "2026-10-08T12:00:00Z"
+                                )
+                )
+                .andExpect(
+                        jsonPath("$.weeks[2].position")
+                                .value(3)
+                )
+                .andExpect(
+                        jsonPath("$.weeks[2].unlocked")
+                                .value(false)
+                )
+                .andExpect(
+                        jsonPath("$.weeks[2].unlocksAt")
+                                .value(
+                                        "2026-10-15T12:00:00Z"
+                                )
+                );
+    }
+
+    @Test
+    void shouldRejectLockedProgramWeekBeforeUnlockDate()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek weekTwo =
+                createWeek(
+                        program,
+                        "Week 2",
+                        2
+                );
+
+        createAccess(
+                member,
+                program,
+                Instant.parse(
+                        "2026-10-01T12:00:00Z"
+                ),
+                null
+        );
+
+        mockMvc.perform(
+                        get(
+                                "/api/me/programs/{programId}/weeks/{weekId}",
+                                program.getId(),
+                                weekTwo.getId()
+                        )
+                                .cookie(
+                                        authenticatedCookie(
+                                                member
+                                        )
+                                )
+                )
+                .andExpect(
+                        status().isForbidden()
+                )
+                .andExpect(
+                        jsonPath("$.title")
+                                .value(
+                                        "Program week locked"
+                                )
+                )
+                .andExpect(
+                        jsonPath("$.unlocksAt")
+                                .value(
+                                        "2026-10-08T12:00:00Z"
+                                )
+                );
+    }
+
+    @Test
+    void shouldAllowProgramWeekExactlyAtUnlockDate()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek weekTwo =
+                createWeek(
+                        program,
+                        "Week 2",
+                        2
+                );
+
+        createAccess(
+                member,
+                program,
+                Instant.parse(
+                        "2026-09-24T12:00:00Z"
+                ),
+                null
+        );
+
+        mockMvc.perform(
+                        get(
+                                "/api/me/programs/{programId}/weeks/{weekId}",
+                                program.getId(),
+                                weekTwo.getId()
+                        )
+                                .cookie(
+                                        authenticatedCookie(
+                                                member
+                                        )
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        jsonPath("$.weekId")
+                                .value(
+                                        weekTwo.getId()
+                                                .toString()
+                                )
+                );
+    }
+
+    @Test
+    void shouldRejectWorkoutFromLockedProgramWeek()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek weekTwo =
+                createWeek(
+                        program,
+                        "Week 2",
+                        2
+                );
+
+        Workout workout =
+                createWorkout(
+                        "Workout 2",
+                        null
+                );
+
+        ProgramWeekWorkout association =
+                addWorkoutToWeek(
+                        weekTwo,
+                        workout,
+                        1
+                );
+
+        createAccess(
+                member,
+                program,
+                Instant.parse(
+                        "2026-10-01T12:00:00Z"
+                ),
+                null
+        );
+
+        mockMvc.perform(
+                        get(
+                                "/api/me/programs/{programId}/weeks/{weekId}/workouts/{associationId}",
+                                program.getId(),
+                                weekTwo.getId(),
+                                association.getId()
+                        )
+                                .cookie(
+                                        authenticatedCookie(
+                                                member
+                                        )
+                                )
+                )
+                .andExpect(
+                        status().isForbidden()
+                )
+                .andExpect(
+                        jsonPath("$.title")
+                                .value(
+                                        "Program week locked"
+                                )
+                )
+                .andExpect(
+                        jsonPath("$.unlocksAt")
+                                .value(
+                                        "2026-10-08T12:00:00Z"
+                                )
+                );
+    }
+
+    @Test
+    void shouldAllowWorkoutExactlyAtProgramWeekUnlockDate()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek weekTwo =
+                createWeek(
+                        program,
+                        "Week 2",
+                        2
+                );
+
+        Workout workout =
+                createWorkout(
+                        "Workout 2",
+                        null
+                );
+
+        ProgramWeekWorkout association =
+                addWorkoutToWeek(
+                        weekTwo,
+                        workout,
+                        1
+                );
+
+        createAccess(
+                member,
+                program,
+                Instant.parse(
+                        "2026-09-24T12:00:00Z"
+                ),
+                null
+        );
+
+        mockMvc.perform(
+                        get(
+                                "/api/me/programs/{programId}/weeks/{weekId}/workouts/{associationId}",
+                                program.getId(),
+                                weekTwo.getId(),
+                                association.getId()
+                        )
+                                .cookie(
+                                        authenticatedCookie(
+                                                member
+                                        )
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        jsonPath("$.programWeekWorkoutId")
+                                .value(
+                                        association.getId()
+                                                .toString()
+                                )
+                );
+    }
+
     private Exercise createExercise(
             String name,
             String instructions,
