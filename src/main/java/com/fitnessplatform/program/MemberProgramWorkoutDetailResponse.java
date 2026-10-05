@@ -3,7 +3,9 @@ package com.fitnessplatform.program;
 import com.fitnessplatform.workout.Workout;
 import com.fitnessplatform.workout.WorkoutExercise;
 
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public record MemberProgramWorkoutDetailResponse(
@@ -17,7 +19,8 @@ public record MemberProgramWorkoutDetailResponse(
 
     public static MemberProgramWorkoutDetailResponse from(
             ProgramWeekWorkout association,
-            List<WorkoutExercise> exercises
+            List<WorkoutExercise> exercises,
+            Map<UUID, BigDecimal> currentWeights
     ) {
         Workout workout =
                 association.getWorkout();
@@ -30,7 +33,15 @@ public record MemberProgramWorkoutDetailResponse(
                 association.getPosition(),
                 exercises.stream()
                         .map(
-                                MemberWorkoutExerciseResponse::from
+                                workoutExercise ->
+                                        MemberWorkoutExerciseResponse
+                                                .from(
+                                                        workoutExercise,
+                                                        currentWeights.get(
+                                                                workoutExercise
+                                                                        .getId()
+                                                        )
+                                                )
                         )
                         .toList()
         );

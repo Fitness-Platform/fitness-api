@@ -16,13 +16,15 @@ public record MemberWorkoutExerciseResponse(
         Integer sets,
         String reps,
         BigDecimal suggestedWeightLb,
+        BigDecimal currentWeightLb,
         Integer restSeconds,
         String notes,
         Integer position
 ) {
 
     public static MemberWorkoutExerciseResponse from(
-            WorkoutExercise workoutExercise
+            WorkoutExercise workoutExercise,
+            BigDecimal currentWeightLb
     ) {
         Exercise exercise =
                 workoutExercise.getExercise();
@@ -37,6 +39,7 @@ public record MemberWorkoutExerciseResponse(
                 workoutExercise.getSets(),
                 workoutExercise.getReps(),
                 workoutExercise.getSuggestedWeightLb(),
+                currentWeightLb,
                 workoutExercise.getRestSeconds(),
                 workoutExercise.getNotes(),
                 workoutExercise.getPosition()
