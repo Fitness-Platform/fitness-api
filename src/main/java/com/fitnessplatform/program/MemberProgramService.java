@@ -1,15 +1,16 @@
 package com.fitnessplatform.program;
 
-import com.fitnessplatform.access.ProgramAccess;
-import com.fitnessplatform.access.ProgramAccessAuthorizationService;
-import com.fitnessplatform.access.ProgramAccessDeniedException;
+import com.fitnessplatform.access.*;
 import com.fitnessplatform.workout.WorkoutExercise;
+import com.fitnessplatform.workout.WorkoutExerciseNotFoundException;
 import com.fitnessplatform.workout.WorkoutExerciseRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -33,6 +34,9 @@ public class MemberProgramService {
     private final ProgramWeekUnlockService
             programWeekUnlockService;
 
+    private final ProgramAccessExerciseLoadService
+            programAccessExerciseLoadService;
+
     public MemberProgramService(
             ProgramAccessAuthorizationService
                     programAccessAuthorizationService,
@@ -45,7 +49,10 @@ public class MemberProgramService {
             WorkoutExerciseRepository
                     workoutExerciseRepository,
             ProgramWeekUnlockService
-                    programWeekUnlockService
+                    programWeekUnlockService,
+
+            ProgramAccessExerciseLoadService
+                    programAccessExerciseLoadService
     ) {
         this.programAccessAuthorizationService =
                 programAccessAuthorizationService;
@@ -64,6 +71,9 @@ public class MemberProgramService {
 
         this.programWeekUnlockService =
                 programWeekUnlockService;
+
+        this.programAccessExerciseLoadService =
+                programAccessExerciseLoadService;
     }
 
     @Transactional(readOnly = true)
@@ -238,9 +248,93 @@ public class MemberProgramService {
                                         .getId()
                         );
 
+        Map<UUID, BigDecimal> currentWeights =
+                programAccessExerciseLoadService
+                        .resolveCurrentWeights(
+                                access,
+                                exercises
+                        );
+
         return MemberProgramWorkoutDetailResponse.from(
                 association,
-                exercises
+                exercises,
+                currentWeights
+        );
+    }
+
+    @Transactional
+    public MemberExerciseLoadResponse updateMyExerciseLoad(
+            UUID userId,
+            UUID programId,
+            UUID programWeekId,
+            UUID programWeekWorkoutId,
+            UUID workoutExerciseId,
+            BigDecimal weightLb
+    ) {
+        ProgramAccess access =
+                requirePublishedProgramAccess(
+                        userId,
+                        programId
+                );
+
+        ProgramWeek week =
+                programWeekRepository
+                        .findByIdAndProgramId(
+                                programWeekId,
+                                programId
+                        )
+                        .orElseThrow(
+                                () ->
+                                        new ProgramWeekNotFoundException(
+                                                programWeekId
+                                        )
+                        );
+
+        programWeekUnlockService
+                .requireUnlocked(
+                        access,
+                        week
+                );
+
+        ProgramWeekWorkout association =
+                programWeekWorkoutRepository
+                        .findByIdAndProgramWeekId(
+                                programWeekWorkoutId,
+                                programWeekId
+                        )
+                        .orElseThrow(
+                                () ->
+                                        new ProgramWeekWorkoutNotFoundException(
+                                                programWeekWorkoutId
+                                        )
+                        );
+
+        WorkoutExercise workoutExercise =
+                workoutExerciseRepository
+                        .findByIdAndWorkoutId(
+                                workoutExerciseId,
+                                association
+                                        .getWorkout()
+                                        .getId()
+                        )
+                        .orElseThrow(
+                                () ->
+                                        new WorkoutExerciseNotFoundException(
+                                                workoutExerciseId
+                                        )
+                        );
+
+        ProgramAccessExerciseLoad load =
+                programAccessExerciseLoadService
+                        .setWeight(
+                                access,
+                                workoutExercise,
+                                weightLb
+                        );
+
+        return MemberExerciseLoadResponse.from(
+                workoutExercise,
+                load.getWeightLb()
         );
     }
 

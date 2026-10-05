@@ -1,10 +1,8 @@
 package com.fitnessplatform.program;
 
+import jakarta.validation.Valid;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.UUID;
@@ -88,6 +86,34 @@ public class MemberProgramController {
                         programId,
                         programWeekId,
                         programWeekWorkoutId
+                );
+    }
+
+    @PutMapping(
+            "/{programId}/weeks/{programWeekId}"
+                    + "/workouts/{programWeekWorkoutId}"
+                    + "/exercises/{workoutExerciseId}/load"
+    )
+    public MemberExerciseLoadResponse updateMyExerciseLoad(
+            @PathVariable UUID programId,
+            @PathVariable UUID programWeekId,
+            @PathVariable UUID programWeekWorkoutId,
+            @PathVariable UUID workoutExerciseId,
+            @Valid @RequestBody
+            MemberExerciseLoadRequest request,
+            Authentication authentication
+    ) {
+        UUID userId =
+                (UUID) authentication.getPrincipal();
+
+        return memberProgramService
+                .updateMyExerciseLoad(
+                        userId,
+                        programId,
+                        programWeekId,
+                        programWeekWorkoutId,
+                        workoutExerciseId,
+                        request.weightLb()
                 );
     }
 }
