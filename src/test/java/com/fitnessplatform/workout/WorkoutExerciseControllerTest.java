@@ -1,10 +1,16 @@
 package com.fitnessplatform.workout;
 
 import com.fitnessplatform.TestcontainersConfiguration;
+import com.fitnessplatform.access.ProgramAccess;
+import com.fitnessplatform.access.ProgramAccessExerciseLoad;
+import com.fitnessplatform.access.ProgramAccessExerciseLoadRepository;
+import com.fitnessplatform.access.ProgramAccessRepository;
 import com.fitnessplatform.auth.JwtService;
 import com.fitnessplatform.auth.passwordreset.PasswordResetTokenRepository;
 import com.fitnessplatform.exercise.Exercise;
 import com.fitnessplatform.exercise.ExerciseRepository;
+import com.fitnessplatform.program.Program;
+import com.fitnessplatform.program.ProgramRepository;
 import com.fitnessplatform.user.User;
 import com.fitnessplatform.user.UserRepository;
 import com.fitnessplatform.user.UserRole;
@@ -20,6 +26,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -61,11 +68,29 @@ class WorkoutExerciseControllerTest {
     @Autowired
     private JwtService jwtService;
 
+    @Autowired
+    private ProgramAccessExerciseLoadRepository
+            programAccessExerciseLoadRepository;
+
+    @Autowired
+    private ProgramAccessRepository
+            programAccessRepository;
+
+    @Autowired
+    private ProgramRepository
+            programRepository;
+
     @BeforeEach
     void cleanDatabase() {
+        programAccessExerciseLoadRepository.deleteAll();
+        programAccessRepository.deleteAll();
+
         workoutExerciseRepository.deleteAll();
         workoutRepository.deleteAll();
         exerciseRepository.deleteAll();
+
+        programRepository.deleteAll();
+
         passwordResetTokenRepository.deleteAll();
         userRepository.deleteAll();
     }
@@ -753,6 +778,104 @@ class WorkoutExerciseControllerTest {
                                         org.hamcrest.Matchers.nullValue()
                                 )
                 );
+    }
+
+    @Test
+    void shouldDeleteWorkoutExerciseAndItsMemberLoadOverride()
+            throws Exception {
+
+        Workout workout =
+                createWorkout(
+                        "Upper Body"
+                );
+
+        Exercise exercise =
+                createExercise(
+                        "Bench Press"
+                );
+
+        WorkoutExercise workoutExercise =
+                createWorkoutExercise(
+                        workout,
+                        exercise,
+                        1
+                );
+
+        User member =
+                userRepository.saveAndFlush(
+                        new User(
+                                "member@example.com",
+                                passwordEncoder.encode(
+                                        "StrongPassword123!"
+                                ),
+                                UserRole.USER
+                        )
+                );
+
+        Program program =
+                new Program(
+                        "Strength Program",
+                        null
+                );
+
+        program.publish();
+
+        program =
+                programRepository.saveAndFlush(
+                        program
+                );
+
+        ProgramAccess access =
+                programAccessRepository.saveAndFlush(
+                        new ProgramAccess(
+                                member,
+                                program,
+                                Instant.parse(
+                                        "2026-09-01T12:00:00Z"
+                                ),
+                                null
+                        )
+                );
+
+        ProgramAccessExerciseLoad load =
+                programAccessExerciseLoadRepository
+                        .saveAndFlush(
+                                new ProgramAccessExerciseLoad(
+                                        access,
+                                        workoutExercise,
+                                        new BigDecimal("45.00")
+                                )
+                        );
+
+        Cookie adminCookie =
+                authenticatedCookie(
+                        UserRole.ADMIN
+                );
+
+        mockMvc.perform(
+                        delete(
+                                "/api/admin/workouts/{workoutId}/exercises/{workoutExerciseId}",
+                                workout.getId(),
+                                workoutExercise.getId()
+                        )
+                                .with(csrf())
+                                .cookie(adminCookie)
+                )
+                .andExpect(
+                        status().isNoContent()
+                );
+
+        assertFalse(
+                workoutExerciseRepository.existsById(
+                        workoutExercise.getId()
+                )
+        );
+
+        assertFalse(
+                programAccessExerciseLoadRepository.existsById(
+                        load.getId()
+                )
+        );
     }
 
     private Workout createWorkout(

@@ -3847,6 +3847,220 @@ class MemberProgramControllerTest {
                 );
     }
 
+    @Test
+    void shouldKeepIndependentLoadsWhenSameExerciseIsUsedInDifferentWorkouts()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek week =
+                createWeek(
+                        program,
+                        "Week 1",
+                        1
+                );
+
+        Workout workoutA =
+                createWorkout(
+                        "Workout A",
+                        null
+                );
+
+        Workout workoutB =
+                createWorkout(
+                        "Workout B",
+                        null
+                );
+
+        ProgramWeekWorkout associationA =
+                addWorkoutToWeek(
+                        week,
+                        workoutA,
+                        1
+                );
+
+        ProgramWeekWorkout associationB =
+                addWorkoutToWeek(
+                        week,
+                        workoutB,
+                        2
+                );
+
+        Exercise exercise =
+                createExercise(
+                        "Bench Press",
+                        null,
+                        "Barbell",
+                        null
+                );
+
+        WorkoutExercise workoutExerciseA =
+                addExerciseToWorkout(
+                        workoutA,
+                        exercise,
+                        3,
+                        "10",
+                        new BigDecimal("40.00"),
+                        90,
+                        null,
+                        1
+                );
+
+        WorkoutExercise workoutExerciseB =
+                addExerciseToWorkout(
+                        workoutB,
+                        exercise,
+                        4,
+                        "8",
+                        new BigDecimal("60.00"),
+                        120,
+                        null,
+                        1
+                );
+
+        createAccess(
+                member,
+                program,
+                Instant.parse(
+                        "2026-09-01T12:00:00Z"
+                ),
+                null
+        );
+
+        Cookie cookie =
+                authenticatedCookie(member);
+
+        String updatePath =
+                "/api/me/programs/{programId}"
+                        + "/weeks/{weekId}"
+                        + "/workouts/{associationId}"
+                        + "/exercises/{workoutExerciseId}/load";
+
+        mockMvc.perform(
+                        put(
+                                updatePath,
+                                program.getId(),
+                                week.getId(),
+                                associationA.getId(),
+                                workoutExerciseA.getId()
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "weightLb": 45.00
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                );
+
+        mockMvc.perform(
+                        put(
+                                updatePath,
+                                program.getId(),
+                                week.getId(),
+                                associationB.getId(),
+                                workoutExerciseB.getId()
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "weightLb": 70.00
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                );
+
+        assertEquals(
+                2,
+                programAccessExerciseLoadRepository.count()
+        );
+
+        mockMvc.perform(
+                        get(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}",
+                                program.getId(),
+                                week.getId(),
+                                associationA.getId()
+                        )
+                                .cookie(cookie)
+                )
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].exerciseId"
+                        )
+                                .value(
+                                        exercise.getId()
+                                                .toString()
+                                )
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].currentWeightLb"
+                        )
+                                .value(45.00)
+                );
+
+        mockMvc.perform(
+                        get(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}",
+                                program.getId(),
+                                week.getId(),
+                                associationB.getId()
+                        )
+                                .cookie(cookie)
+                )
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].exerciseId"
+                        )
+                                .value(
+                                        exercise.getId()
+                                                .toString()
+                                )
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].currentWeightLb"
+                        )
+                                .value(70.00)
+                );
+    }
+
     private Exercise createExercise(
             String name,
             String instructions,
