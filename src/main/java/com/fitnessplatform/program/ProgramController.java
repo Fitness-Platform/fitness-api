@@ -61,6 +61,24 @@ public class ProgramController {
         return ProgramResponse.from(program);
     }
 
+    @PutMapping("/{programId}/pricing")
+    public ProgramResponse updatePricing(
+            @PathVariable UUID programId,
+            @Valid
+            @RequestBody
+            ProgramPricingRequest request
+    ) {
+        Program program =
+                programService.updatePricing(
+                        programId,
+                        request
+                );
+
+        return ProgramResponse.from(
+                program
+        );
+    }
+
     @PostMapping("/{programId}/publish")
     public ProgramResponse publish(
             @PathVariable UUID programId

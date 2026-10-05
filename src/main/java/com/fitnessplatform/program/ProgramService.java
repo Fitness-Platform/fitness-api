@@ -59,6 +59,23 @@ public class ProgramService {
     }
 
     @Transactional
+    public Program updatePricing(
+            UUID programId,
+            ProgramPricingRequest request
+    ) {
+        Program program =
+                findById(
+                        programId
+                );
+
+        program.updatePrice(
+                request.priceCents()
+        );
+
+        return program;
+    }
+
+    @Transactional
     public Program publish(UUID programId) {
         Program program = findById(programId);
 
