@@ -629,6 +629,113 @@ class ProgramAccessAuthorizationIntegrationTest {
         );
     }
 
+    @Test
+    void shouldUseOlderActiveAccessWhenNewerAccessIsRevoked() {
+
+        User user =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program"
+                );
+
+        ProgramAccess olderActiveAccess =
+                createAccess(
+                        user,
+                        program,
+                        Instant.parse(
+                                "2026-08-01T12:00:00Z"
+                        ),
+                        null
+                );
+
+        ProgramAccess newerAccess =
+                createAccess(
+                        user,
+                        program,
+                        Instant.parse(
+                                "2026-09-15T12:00:00Z"
+                        ),
+                        null
+                );
+
+        newerAccess.revoke(
+                Instant.parse(
+                        "2026-09-20T12:00:00Z"
+                )
+        );
+
+        programAccessRepository.saveAndFlush(
+                newerAccess
+        );
+
+        ProgramAccess result =
+                authorizationService
+                        .findActiveAccess(
+                                user.getId(),
+                                program.getId()
+                        )
+                        .orElseThrow();
+
+        assertEquals(
+                olderActiveAccess.getId(),
+                result.getId()
+        );
+    }
+
+    @Test
+    void shouldUseOlderActiveAccessWhenNewerAccessIsExpired() {
+
+        User user =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program"
+                );
+
+        ProgramAccess olderActiveAccess =
+                createAccess(
+                        user,
+                        program,
+                        Instant.parse(
+                                "2026-08-01T12:00:00Z"
+                        ),
+                        Instant.parse(
+                                "2026-12-01T12:00:00Z"
+                        )
+                );
+
+        createAccess(
+                user,
+                program,
+                Instant.parse(
+                        "2026-09-01T12:00:00Z"
+                ),
+                Instant.parse(
+                        "2026-09-30T12:00:00Z"
+                )
+        );
+
+        ProgramAccess result =
+                authorizationService
+                        .findActiveAccess(
+                                user.getId(),
+                                program.getId()
+                        )
+                        .orElseThrow();
+
+        assertEquals(
+                olderActiveAccess.getId(),
+                result.getId()
+        );
+    }
+
     private User createUser(
             String email
     ) {

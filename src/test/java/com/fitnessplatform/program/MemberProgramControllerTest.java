@@ -43,6 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -1407,6 +1408,134 @@ class MemberProgramControllerTest {
                 )
                 .andExpect(
                         status().isForbidden()
+                );
+    }
+
+    @Test
+    void shouldRejectProgramWeekWhenAccessIsExpired()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek week =
+                createWeek(
+                        program,
+                        "Week 1",
+                        1
+                );
+
+        createAccess(
+                member,
+                program,
+                Instant.parse(
+                        "2026-01-01T12:00:00Z"
+                ),
+                Instant.parse(
+                        "2026-09-30T12:00:00Z"
+                )
+        );
+
+        mockMvc.perform(
+                        get(
+                                "/api/me/programs/{programId}/weeks/{weekId}",
+                                program.getId(),
+                                week.getId()
+                        )
+                                .cookie(
+                                        authenticatedCookie(
+                                                member
+                                        )
+                                )
+                )
+                .andExpect(
+                        status().isForbidden()
+                )
+                .andExpect(
+                        jsonPath("$.title")
+                                .value(
+                                        "Program access denied"
+                                )
+                );
+    }
+
+    @Test
+    void shouldRejectProgramWorkoutWhenAccessIsExpired()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek week =
+                createWeek(
+                        program,
+                        "Week 1",
+                        1
+                );
+
+        Workout workout =
+                createWorkout(
+                        "Lower Body",
+                        null
+                );
+
+        ProgramWeekWorkout association =
+                addWorkoutToWeek(
+                        week,
+                        workout,
+                        1
+                );
+
+        createAccess(
+                member,
+                program,
+                Instant.parse(
+                        "2026-01-01T12:00:00Z"
+                ),
+                Instant.parse(
+                        "2026-09-30T12:00:00Z"
+                )
+        );
+
+        mockMvc.perform(
+                        get(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}",
+                                program.getId(),
+                                week.getId(),
+                                association.getId()
+                        )
+                                .cookie(
+                                        authenticatedCookie(
+                                                member
+                                        )
+                                )
+                )
+                .andExpect(
+                        status().isForbidden()
+                )
+                .andExpect(
+                        jsonPath("$.title")
+                                .value(
+                                        "Program access denied"
+                                )
                 );
     }
 
@@ -3386,6 +3515,116 @@ class MemberProgramControllerTest {
     }
 
     @Test
+    void shouldRejectUpdatingExerciseLoadWithExpiredAccess()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek week =
+                createWeek(
+                        program,
+                        "Week 1",
+                        1
+                );
+
+        Workout workout =
+                createWorkout(
+                        "Lower Body",
+                        null
+                );
+
+        ProgramWeekWorkout association =
+                addWorkoutToWeek(
+                        week,
+                        workout,
+                        1
+                );
+
+        Exercise exercise =
+                createExercise(
+                        "Goblet Squat",
+                        null,
+                        "Dumbbell",
+                        null
+                );
+
+        WorkoutExercise workoutExercise =
+                addExerciseToWorkout(
+                        workout,
+                        exercise,
+                        3,
+                        "10",
+                        new BigDecimal("25.00"),
+                        90,
+                        null,
+                        1
+                );
+
+        createAccess(
+                member,
+                program,
+                Instant.parse(
+                        "2026-01-01T12:00:00Z"
+                ),
+                Instant.parse(
+                        "2026-09-30T12:00:00Z"
+                )
+        );
+
+        mockMvc.perform(
+                        put(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}"
+                                        + "/exercises/{workoutExerciseId}/load",
+                                program.getId(),
+                                week.getId(),
+                                association.getId(),
+                                workoutExercise.getId()
+                        )
+                                .with(csrf())
+                                .cookie(
+                                        authenticatedCookie(
+                                                member
+                                        )
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "weightLb": 30.00
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isForbidden()
+                )
+                .andExpect(
+                        jsonPath("$.title")
+                                .value(
+                                        "Program access denied"
+                                )
+                );
+
+        assertEquals(
+                0,
+                programAccessExerciseLoadRepository.count()
+        );
+    }
+
+    @Test
     void shouldRejectNegativeExerciseWeight()
             throws Exception {
 
@@ -4058,6 +4297,177 @@ class MemberProgramControllerTest {
                                 "$.exercises[0].currentWeightLb"
                         )
                                 .value(70.00)
+                );
+    }
+
+    @Test
+    void shouldUseOlderActiveAccessWhenNewerAccessIsRevokedInProgramDetail()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramAccess olderActiveAccess =
+                createAccess(
+                        member,
+                        program,
+                        Instant.parse(
+                                "2026-08-01T12:00:00Z"
+                        ),
+                        null
+                );
+
+        ProgramAccess newerAccess =
+                createAccess(
+                        member,
+                        program,
+                        Instant.parse(
+                                "2026-09-15T12:00:00Z"
+                        ),
+                        null
+                );
+
+        newerAccess.revoke(
+                Instant.parse(
+                        "2026-09-20T12:00:00Z"
+                )
+        );
+
+        programAccessRepository.saveAndFlush(
+                newerAccess
+        );
+
+        Cookie memberCookie =
+                authenticatedCookie(member);
+
+        mockMvc.perform(
+                        get(
+                                "/api/me/programs/{programId}",
+                                program.getId()
+                        )
+                                .cookie(memberCookie)
+                )
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        jsonPath("$.programId")
+                                .value(
+                                        program.getId()
+                                                .toString()
+                                )
+                )
+                .andExpect(
+                        jsonPath("$.accessStartsAt")
+                                .value(
+                                        olderActiveAccess
+                                                .getStartsAt()
+                                                .toString()
+                                )
+                );
+    }
+
+    @Test
+    void shouldImmediatelyDenyMemberAccessAfterAdminRevokesProgramAccess()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        User admin =
+                createUser(
+                        "admin@example.com",
+                        UserRole.ADMIN
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramAccess access =
+                createAccess(
+                        member,
+                        program,
+                        Instant.parse(
+                                "2026-09-01T12:00:00Z"
+                        ),
+                        null
+                );
+
+        Cookie memberCookie =
+                authenticatedCookie(member);
+
+        Cookie adminCookie =
+                authenticatedCookie(admin);
+
+        mockMvc.perform(
+                        get(
+                                "/api/me/programs/{programId}",
+                                program.getId()
+                        )
+                                .cookie(memberCookie)
+                )
+                .andExpect(
+                        status().isOk()
+                );
+
+        mockMvc.perform(
+                        post(
+                                "/api/admin/program-accesses/{accessId}/revoke",
+                                access.getId()
+                        )
+                                .with(csrf())
+                                .cookie(adminCookie)
+                )
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        jsonPath("$.revokedAt")
+                                .isNotEmpty()
+                );
+
+        mockMvc.perform(
+                        get(
+                                "/api/me/programs/{programId}",
+                                program.getId()
+                        )
+                                .cookie(memberCookie)
+                )
+                .andExpect(
+                        status().isForbidden()
+                )
+                .andExpect(
+                        jsonPath("$.title")
+                                .value(
+                                        "Program access denied"
+                                )
+                );
+
+        mockMvc.perform(
+                        get(
+                                "/api/me/programs"
+                        )
+                                .cookie(memberCookie)
+                )
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        jsonPath("$.length()")
+                                .value(0)
                 );
     }
 
