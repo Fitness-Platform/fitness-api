@@ -13,14 +13,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.hamcrest.Matchers.nullValue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -89,6 +90,15 @@ class ProgramControllerTest {
                 .andExpect(
                         jsonPath("$.status")
                                 .value("DRAFT")
+                )
+                .andExpect(
+                        jsonPath("$.priceCents").value(
+                                nullValue()
+                        )
+                )
+                .andExpect(
+                        jsonPath("$.currency")
+                                .value("USD")
                 )
                 .andExpect(jsonPath("$.createdAt").isNotEmpty())
                 .andExpect(jsonPath("$.updatedAt").isNotEmpty());
@@ -478,6 +488,245 @@ class ProgramControllerTest {
 
         assertTrue(
                 programRepository.findAll().isEmpty()
+        );
+    }
+
+    @Test
+    void shouldUpdateProgramPricing() throws Exception {
+
+        Program program =
+                programRepository.saveAndFlush(
+                        new Program(
+                                "Six Week Strength",
+                                "Program description"
+                        )
+                );
+
+        Cookie adminCookie =
+                authenticatedCookie(
+                        UserRole.ADMIN
+                );
+
+        mockMvc.perform(
+                        put(
+                                "/api/admin/programs/{programId}/pricing",
+                                program.getId()
+                        )
+                                .with(csrf())
+                                .cookie(adminCookie)
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content("""
+                                    {
+                                      "priceCents": 4999
+                                    }
+                                    """)
+                )
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath("$.priceCents")
+                                .value(4999)
+                )
+                .andExpect(
+                        jsonPath("$.currency")
+                                .value("USD")
+                );
+
+        Program persisted =
+                programRepository
+                        .findById(
+                                program.getId()
+                        )
+                        .orElseThrow();
+
+        assertEquals(
+                4999L,
+                persisted.getPriceCents()
+        );
+
+        assertEquals(
+                "USD",
+                persisted.getCurrency()
+        );
+    }
+
+    @Test
+    void shouldAllowClearingProgramPricing() throws Exception {
+
+        Program program =
+                new Program(
+                        "Six Week Strength",
+                        "Program description"
+                );
+
+        program.updatePrice(
+                4999L
+        );
+
+        program =
+                programRepository.saveAndFlush(
+                        program
+                );
+
+        Cookie adminCookie =
+                authenticatedCookie(
+                        UserRole.ADMIN
+                );
+
+        mockMvc.perform(
+                        put(
+                                "/api/admin/programs/{programId}/pricing",
+                                program.getId()
+                        )
+                                .with(csrf())
+                                .cookie(adminCookie)
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content("""
+                                    {
+                                      "priceCents": null
+                                    }
+                                    """)
+                )
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath("$.priceCents")
+                                .value(nullValue())
+                )
+                .andExpect(
+                        jsonPath("$.currency")
+                                .value("USD")
+                );
+
+        Program persisted =
+                programRepository
+                        .findById(
+                                program.getId()
+                        )
+                        .orElseThrow();
+
+        assertNull(
+                persisted.getPriceCents()
+        );
+    }
+
+    @Test
+    void shouldRejectZeroProgramPrice() throws Exception {
+
+        Program program =
+                programRepository.saveAndFlush(
+                        new Program(
+                                "Six Week Strength",
+                                null
+                        )
+                );
+
+        Cookie adminCookie =
+                authenticatedCookie(
+                        UserRole.ADMIN
+                );
+
+        mockMvc.perform(
+                        put(
+                                "/api/admin/programs/{programId}/pricing",
+                                program.getId()
+                        )
+                                .with(csrf())
+                                .cookie(adminCookie)
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content("""
+                                    {
+                                      "priceCents": 0
+                                    }
+                                    """)
+                )
+                .andExpect(
+                        status().isBadRequest()
+                );
+
+        Program persisted =
+                programRepository
+                        .findById(
+                                program.getId()
+                        )
+                        .orElseThrow();
+
+        assertNull(
+                persisted.getPriceCents()
+        );
+    }
+
+    @Test
+    void shouldRejectNegativeProgramPrice() throws Exception {
+
+        Program program =
+                programRepository.saveAndFlush(
+                        new Program(
+                                "Six Week Strength",
+                                null
+                        )
+                );
+
+        Cookie adminCookie =
+                authenticatedCookie(
+                        UserRole.ADMIN
+                );
+
+        mockMvc.perform(
+                        put(
+                                "/api/admin/programs/{programId}/pricing",
+                                program.getId()
+                        )
+                                .with(csrf())
+                                .cookie(adminCookie)
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content("""
+                                    {
+                                      "priceCents": -100
+                                    }
+                                    """)
+                )
+                .andExpect(
+                        status().isBadRequest()
+                );
+
+        Program persisted =
+                programRepository
+                        .findById(
+                                program.getId()
+                        )
+                        .orElseThrow();
+
+        assertNull(
+                persisted.getPriceCents()
+        );
+    }
+
+    @Test
+    void shouldRejectNonPositiveProgramPriceAtDatabaseLevel() {
+
+        Program program =
+                new Program(
+                        "Six Week Strength",
+                        null
+                );
+
+        program.updatePrice(
+                0L
+        );
+
+        assertThrows(
+                DataIntegrityViolationException.class,
+                () ->
+                        programRepository.saveAndFlush(
+                                program
+                        )
         );
     }
 

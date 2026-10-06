@@ -325,4 +325,51 @@ class ProgramServiceTest {
         verify(programRepository)
                 .delete(program);
     }
+
+    @Test
+    void shouldUpdateProgramPricing() {
+
+        UUID programId =
+                UUID.randomUUID();
+
+        Program program =
+                new Program(
+                        "Strength Program",
+                        null
+                );
+
+        when(
+                programRepository.findById(
+                        programId
+                )
+        ).thenReturn(
+                Optional.of(program)
+        );
+
+        ProgramPricingRequest request =
+                new ProgramPricingRequest(
+                        4999L
+                );
+
+        Program result =
+                programService.updatePricing(
+                        programId,
+                        request
+                );
+
+        assertSame(
+                program,
+                result
+        );
+
+        assertEquals(
+                4999L,
+                result.getPriceCents()
+        );
+
+        assertEquals(
+                "USD",
+                result.getCurrency()
+        );
+    }
 }

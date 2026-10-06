@@ -8,6 +8,8 @@ public record ProgramResponse(
         String name,
         String description,
         ProgramStatus status,
+        Long priceCents,
+        String currency,
         Instant createdAt,
         Instant updatedAt
 ) {
@@ -19,6 +21,8 @@ public record ProgramResponse(
                 program.getName(),
                 program.getDescription(),
                 program.getStatus(),
+                program.getPriceCents(),
+                program.getCurrency(),
                 program.getCreatedAt(),
                 program.getUpdatedAt()
         );

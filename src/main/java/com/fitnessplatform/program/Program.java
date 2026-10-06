@@ -29,6 +29,15 @@ public class Program {
     )
     private ProgramStatus status;
 
+    @Column(name = "price_cents")
+    private Long priceCents;
+
+    @Column(
+            nullable = false,
+            length = 3
+    )
+    private String currency;
+
     @Column(
             name = "created_at",
             nullable = false,
@@ -52,6 +61,7 @@ public class Program {
         this.name = name;
         this.description = description;
         this.status = ProgramStatus.DRAFT;
+        this.currency = "USD";
     }
 
     public void update(
@@ -99,11 +109,25 @@ public class Program {
         return status;
     }
 
+    public Long getPriceCents() {
+        return priceCents;
+    }
+
+    public String getCurrency() {
+        return currency;
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
     }
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public void updatePrice(
+            Long priceCents
+    ) {
+        this.priceCents = priceCents;
     }
 }
