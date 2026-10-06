@@ -6,6 +6,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class StripePropertiesTest {
 
@@ -53,6 +54,27 @@ class StripePropertiesTest {
                     );
                 }
         );
+    }
+
+    @Test
+    void shouldFailWhenRequiredStripeConfigurationIsMissing() {
+
+        new ApplicationContextRunner()
+                .withUserConfiguration(
+                        TestConfiguration.class
+                )
+                .withPropertyValues(
+                        "stripe.secret-key=",
+                        "stripe.webhook-secret=",
+                        "stripe.checkout.success-url=http://localhost:5173/checkout/success",
+                        "stripe.checkout.cancel-url=http://localhost:5173/checkout/cancel"
+                )
+                .run(
+                        context ->
+                                assertNotNull(
+                                        context.getStartupFailure()
+                                )
+                );
     }
 
     @Configuration(proxyBeanMethods = false)
