@@ -30,6 +30,7 @@
 		<java.version>21</java.version>
 		<jjwt.version>0.13.0</jjwt.version>
 		<resend.version>4.21.1</resend.version>
+		<stripe.version>34.0.0</stripe.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -44,6 +45,12 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>com.stripe</groupId>
+			<artifactId>stripe-java</artifactId>
+			<version>${stripe.version}</version>
 		</dependency>
 
 		<dependency>
