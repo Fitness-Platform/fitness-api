@@ -109,7 +109,7 @@ public class StripeCheckoutGatewayImpl
             );
 
         } catch (StripeException exception) {
-            throw new IllegalStateException(
+            throw new StripeCheckoutException(
                     "Unable to create Stripe Checkout Session",
                     exception
             );

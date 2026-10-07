@@ -25,6 +25,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
+import com.fitnessplatform.purchase.stripe.StripeCheckoutException;
 
 import java.util.UUID;
 
@@ -154,6 +155,16 @@ class PurchaseCheckoutControllerTest {
                 )
                 .andExpect(
                         status().isCreated()
+                )
+                .andExpect(
+                        jsonPath("$.purchaseId")
+                                .isNotEmpty()
+                )
+                .andExpect(
+                        jsonPath("$.checkoutUrl")
+                                .value(
+                                        "https://checkout.stripe.test/session"
+                                )
                 );
 
         assertEquals(
@@ -444,6 +455,87 @@ class PurchaseCheckoutControllerTest {
         );
     }
 
+    @Test
+    void shouldKeepPendingPurchaseWhenStripeCheckoutCreationFails()
+            throws Exception {
+
+        User user =
+                createUser(
+                        "member@example.com",
+                        UserRole.USER
+                );
+
+        Program program =
+                new Program(
+                        "Six Week Strength",
+                        "Strength program"
+                );
+
+        program.updatePrice(
+                4999L
+        );
+
+        program.publish();
+
+        program =
+                programRepository.saveAndFlush(
+                        program
+                );
+
+        stripeCheckoutGateway.failNextCall();
+
+        Cookie authCookie =
+                authenticatedCookie(
+                        user
+                );
+
+        mockMvc.perform(
+                        post(
+                                "/api/programs/{programId}/checkout",
+                                program.getId()
+                        )
+                                .with(csrf())
+                                .cookie(authCookie)
+                )
+                .andExpect(
+                        status().isBadGateway()
+                )
+                .andExpect(
+                        jsonPath("$.title")
+                                .value(
+                                        "Stripe checkout unavailable"
+                                )
+                );
+
+        assertEquals(
+                1,
+                purchaseRepository.count()
+        );
+
+        Purchase purchase =
+                purchaseRepository
+                        .findAll()
+                        .getFirst();
+
+        assertEquals(
+                PurchaseStatus.PENDING,
+                purchase.getStatus()
+        );
+
+        assertNull(
+                purchase.getStripeCheckoutSessionId()
+        );
+
+        assertNull(
+                purchase.getPaidAt()
+        );
+
+        assertEquals(
+                1,
+                stripeCheckoutGateway.invocationCount
+        );
+    }
+
     private User createUser(
             String email,
             UserRole role
@@ -492,6 +584,7 @@ class PurchaseCheckoutControllerTest {
         private Long amountCents;
         private String currency;
         private int invocationCount;
+        private boolean shouldFail;
 
         @Override
         public StripeCheckoutSession createSession(
@@ -507,10 +600,20 @@ class PurchaseCheckoutControllerTest {
             this.amountCents = amountCents;
             this.currency = currency;
 
+            if (shouldFail) {
+                throw new StripeCheckoutException(
+                        "Stripe unavailable"
+                );
+            }
+
             return new StripeCheckoutSession(
                     "cs_test_checkout_123",
                     "https://checkout.stripe.test/session"
             );
+        }
+
+        void failNextCall() {
+            shouldFail = true;
         }
 
         void reset() {
@@ -519,6 +622,7 @@ class PurchaseCheckoutControllerTest {
             amountCents = null;
             currency = null;
             invocationCount = 0;
+            shouldFail = false;
         }
     }
 }
