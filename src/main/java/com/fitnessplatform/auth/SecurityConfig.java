@@ -32,7 +32,13 @@ public class SecurityConfig {
                         )
                 )
 
-                .csrf(csrf -> csrf.spa())
+                .csrf(csrf -> {
+                    csrf.spa();
+
+                    csrf.ignoringRequestMatchers(
+                            "/api/webhooks/stripe"
+                    );
+                })
 
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(
@@ -57,6 +63,11 @@ public class SecurityConfig {
                                 "/api/auth/logout",
                                 "/api/auth/forgot-password",
                                 "/api/auth/reset-password"
+                        ).permitAll()
+
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/webhooks/stripe"
                         ).permitAll()
 
                         .requestMatchers(
