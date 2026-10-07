@@ -52,6 +52,13 @@ public class Purchase {
     private Instant paidAt;
 
     @Column(
+            name = "stripe_checkout_session_id",
+            unique = true,
+            length = 255
+    )
+    private String stripeCheckoutSessionId;
+
+    @Column(
             name = "created_at",
             nullable = false,
             updatable = false
@@ -78,6 +85,13 @@ public class Purchase {
         this.amountCents = amountCents;
         this.currency = currency;
         this.status = PurchaseStatus.PENDING;
+    }
+
+    public void attachStripeCheckoutSession(
+            String stripeCheckoutSessionId
+    ) {
+        this.stripeCheckoutSessionId =
+                stripeCheckoutSessionId;
     }
 
     @PrePersist
@@ -119,6 +133,10 @@ public class Purchase {
 
     public Instant getPaidAt() {
         return paidAt;
+    }
+
+    public String getStripeCheckoutSessionId() {
+        return stripeCheckoutSessionId;
     }
 
     public Instant getCreatedAt() {

@@ -112,12 +112,59 @@ class PurchaseIntegrationTest {
                 persisted.getPaidAt()
         );
 
+        assertNull(
+                persisted.getStripeCheckoutSessionId()
+        );
+
         assertNotNull(
                 persisted.getCreatedAt()
         );
 
         assertNotNull(
                 persisted.getUpdatedAt()
+        );
+    }
+
+    @Test
+    void shouldPersistStripeCheckoutSessionId() {
+
+        User user =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program"
+                );
+
+        Purchase purchase =
+                new Purchase(
+                        user,
+                        program,
+                        4999L,
+                        "USD"
+                );
+
+        purchase.attachStripeCheckoutSession(
+                "cs_test_example"
+        );
+
+        purchase =
+                purchaseRepository.saveAndFlush(
+                        purchase
+                );
+
+        Purchase persisted =
+                purchaseRepository
+                        .findById(
+                                purchase.getId()
+                        )
+                        .orElseThrow();
+
+        assertEquals(
+                "cs_test_example",
+                persisted.getStripeCheckoutSessionId()
         );
     }
 
