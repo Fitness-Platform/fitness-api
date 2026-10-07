@@ -1,6 +1,7 @@
 package com.fitnessplatform.purchase;
 
 import com.fitnessplatform.purchase.stripe.StripeCheckoutException;
+import com.fitnessplatform.purchase.stripe.StripeWebhookException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -41,6 +42,23 @@ public class PurchaseExceptionhandler {
         problem.setTitle(
                 "Stripe checkout unavailable"
         );
+
+        return problem;
+    }
+
+    @ExceptionHandler(
+            StripeWebhookException.class
+    )
+    ProblemDetail handleStripeWebhook(
+            StripeWebhookException exception
+    ) {
+        ProblemDetail problem =
+                ProblemDetail.forStatusAndDetail(
+                        HttpStatus.BAD_REQUEST,
+                        "Invalid Stripe webhook signature"
+                );
+
+        problem.setTitle("Invalid Stripe webhook");
 
         return problem;
     }
