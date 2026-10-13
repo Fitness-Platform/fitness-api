@@ -1,6 +1,5 @@
 package com.fitnessplatform.purchase.stripe;
 
-import com.fitnessplatform.purchase.PurchasePaymentService;
 import com.stripe.model.Event;
 import com.stripe.model.EventDataObjectDeserializer;
 import com.stripe.model.StripeObject;
@@ -21,8 +20,7 @@ import static org.mockito.Mockito.*;
 class StripeWebhookEventHandlerTest {
 
     @Mock
-    private PurchasePaymentService
-            purchasePaymentService;
+    private StripeWebhookProcessingService processingService;
 
     @Mock
     private Event
@@ -38,9 +36,7 @@ class StripeWebhookEventHandlerTest {
     @BeforeEach
     void setUp() {
         handler =
-                new StripeWebhookEventHandler(
-                        purchasePaymentService
-                );
+                new StripeWebhookEventHandler(processingService);
     }
 
     @Test
@@ -77,13 +73,16 @@ class StripeWebhookEventHandlerTest {
                 )
         );
 
+        when(event.getId()).thenReturn("evt_test_123");
+
         handler.handle(
                 event
         );
 
         verify(
-                purchasePaymentService
-        ).completeSuccessfulPurchase(
+                processingService
+        ).processPaidCheckout(
+                "evt_test_123",
                 purchaseId,
                 "cs_test_123",
                 "pi_test_123"
@@ -127,7 +126,7 @@ class StripeWebhookEventHandlerTest {
         );
 
         verifyNoInteractions(
-                purchasePaymentService
+                processingService
         );
     }
 
@@ -145,7 +144,7 @@ class StripeWebhookEventHandlerTest {
         );
 
         verifyNoInteractions(
-                purchasePaymentService
+                processingService
         );
 
         verify(
@@ -194,7 +193,7 @@ class StripeWebhookEventHandlerTest {
         );
 
         verifyNoInteractions(
-                purchasePaymentService
+                processingService
         );
     }
 
@@ -239,7 +238,7 @@ class StripeWebhookEventHandlerTest {
         );
 
         verifyNoInteractions(
-                purchasePaymentService
+                processingService
         );
     }
 
@@ -273,7 +272,25 @@ class StripeWebhookEventHandlerTest {
         );
 
         verifyNoInteractions(
-                purchasePaymentService
+                processingService
+        );
+    }
+
+    @Test
+    void shouldRouteExpiredSessionToProcessingService() {
+        UUID purchaseId = UUID.randomUUID();
+        Session session = checkoutSession(
+                purchaseId.toString(), "cs_test_expired", "unpaid", null
+        );
+        when(event.getType()).thenReturn("checkout.session.expired");
+        when(event.getDataObjectDeserializer()).thenReturn(dataObjectDeserializer);
+        when(dataObjectDeserializer.getObject()).thenReturn(Optional.of(session));
+        when(event.getId()).thenReturn("evt_expired_123");
+
+        handler.handle(event);
+
+        verify(processingService).processExpiredCheckout(
+                "evt_expired_123", purchaseId, "cs_test_expired"
         );
     }
 

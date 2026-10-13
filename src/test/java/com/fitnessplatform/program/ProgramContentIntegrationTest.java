@@ -1,7 +1,9 @@
 package com.fitnessplatform.program;
 
 import com.fitnessplatform.TestcontainersConfiguration;
+import com.fitnessplatform.access.ProgramAccessRepository;
 import com.fitnessplatform.exercise.ExerciseRepository;
+import com.fitnessplatform.purchase.PurchaseRepository;
 import com.fitnessplatform.workout.WorkoutExerciseRepository;
 import com.fitnessplatform.workout.WorkoutRepository;
 import jakarta.persistence.EntityManager;
@@ -63,8 +65,17 @@ class ProgramContentIntegrationTest {
     @Autowired
     private ExerciseService exerciseService;
 
+    @Autowired
+    private ProgramAccessRepository programAccessRepository;
+
+    @Autowired
+    private PurchaseRepository purchaseRepository;
+
     @BeforeEach
     void cleanDatabase() {
+        programAccessRepository.deleteAll();
+        purchaseRepository.deleteAll();
+
         programWeekWorkoutRepository.deleteAll();
         programResourceRepository.deleteAll();
         programWeekRepository.deleteAll();

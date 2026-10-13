@@ -177,4 +177,18 @@ public class Purchase {
         this.stripePaymentIntentId =
                 stripePaymentIntentId;
     }
+
+    public void markExpired() {
+        if (status == PurchaseStatus.EXPIRED) {
+            return;
+        }
+
+        if (status != PurchaseStatus.PENDING) {
+            throw new IllegalStateException(
+                    "Only pending purchases can be marked as expired"
+            );
+        }
+
+        this.status = PurchaseStatus.EXPIRED;
+    }
 }

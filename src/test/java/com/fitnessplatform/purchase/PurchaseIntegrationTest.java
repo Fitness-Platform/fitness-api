@@ -474,6 +474,146 @@ class PurchaseIntegrationTest {
         );
     }
 
+    @Test
+    void shouldMarkPendingPurchaseAsExpired() {
+        User user = createUser("member@example.com");
+        Program program = createProgram("Strength Program");
+
+        Purchase purchase = new Purchase(
+                user,
+                program,
+                8900L,
+                "USD"
+        );
+
+        purchase.attachStripeCheckoutSession("cs_test_expired");
+
+        purchase = purchaseRepository.saveAndFlush(purchase);
+
+        purchase.markExpired();
+
+        purchaseRepository.saveAndFlush(purchase);
+
+        Purchase persisted = purchaseRepository
+                .findById(purchase.getId())
+                .orElseThrow();
+
+        assertEquals(
+                PurchaseStatus.EXPIRED,
+                persisted.getStatus()
+        );
+
+        assertNull(persisted.getPaidAt());
+        assertNull(persisted.getStripePaymentIntentId());
+
+        assertEquals(
+                "cs_test_expired",
+                persisted.getStripeCheckoutSessionId()
+        );
+    }
+
+    @Test
+    void shouldRejectExpiringPaidPurchase() {
+        User user = createUser("member@example.com");
+        Program program = createProgram("Strength Program");
+
+        Purchase purchase = new Purchase(
+                user,
+                program,
+                8900L,
+                "USD"
+        );
+
+        Instant paidAt = Instant.parse(
+                "2026-10-09T12:00:00Z"
+        );
+
+        purchase.markPaid(
+                paidAt,
+                "pi_test_123"
+        );
+
+        assertThrows(
+                IllegalStateException.class,
+                purchase::markExpired
+        );
+
+        assertEquals(
+                PurchaseStatus.PAID,
+                purchase.getStatus()
+        );
+
+        assertEquals(paidAt, purchase.getPaidAt());
+
+        assertEquals(
+                "pi_test_123",
+                purchase.getStripePaymentIntentId()
+        );
+    }
+
+    @Test
+    void shouldRejectMarkingExpiredPurchaseAsPaid() {
+        User user = createUser("member@example.com");
+        Program program = createProgram("Strength Program");
+
+        Purchase purchase = new Purchase(
+                user,
+                program,
+                8900L,
+                "USD"
+        );
+
+        purchase.markExpired();
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> purchase.markPaid(
+                        Instant.parse("2026-10-09T12:00:00Z"),
+                        "pi_test_123"
+                )
+        );
+
+        assertEquals(
+                PurchaseStatus.EXPIRED,
+                purchase.getStatus()
+        );
+
+        assertNull(purchase.getPaidAt());
+        assertNull(purchase.getStripePaymentIntentId());
+    }
+
+    @Test
+    void shouldAllowRepeatedExpirationWithoutChanges() {
+        User user = createUser("member@example.com");
+        Program program = createProgram("Strength Program");
+
+        Purchase purchase = new Purchase(
+                user,
+                program,
+                8900L,
+                "USD"
+        );
+
+        purchase = purchaseRepository.saveAndFlush(purchase);
+
+        purchase.markExpired();
+        purchase.markExpired();
+
+        purchaseRepository.saveAndFlush(purchase);
+
+        Purchase persisted = purchaseRepository
+                .findById(purchase.getId())
+                .orElseThrow();
+
+        assertEquals(
+                PurchaseStatus.EXPIRED,
+                persisted.getStatus()
+        );
+
+        assertNull(persisted.getPaidAt());
+        assertNull(persisted.getStripePaymentIntentId());
+    }
+
     private User createUser(
             String email
     ) {

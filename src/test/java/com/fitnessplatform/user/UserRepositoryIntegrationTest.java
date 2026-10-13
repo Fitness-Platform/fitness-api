@@ -1,6 +1,9 @@
 package com.fitnessplatform.user;
 
 import com.fitnessplatform.TestcontainersConfiguration;
+import com.fitnessplatform.access.ProgramAccessRepository;
+import com.fitnessplatform.auth.passwordreset.PasswordResetTokenRepository;
+import com.fitnessplatform.purchase.PurchaseRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,8 +25,21 @@ class UserRepositoryIntegrationTest {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private ProgramAccessRepository programAccessRepository;
+
+    @Autowired
+    private PurchaseRepository purchaseRepository;
+
+    @Autowired
+    private PasswordResetTokenRepository passwordResetTokenRepository;
+
     @BeforeEach
     void cleanDatabase() {
+        programAccessRepository.deleteAll();
+        purchaseRepository.deleteAll();
+
+        passwordResetTokenRepository.deleteAll();
         userRepository.deleteAll();
     }
 

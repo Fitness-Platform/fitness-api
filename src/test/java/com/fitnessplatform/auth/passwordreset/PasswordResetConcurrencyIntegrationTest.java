@@ -1,6 +1,8 @@
 package com.fitnessplatform.auth.passwordreset;
 
 import com.fitnessplatform.TestcontainersConfiguration;
+import com.fitnessplatform.access.ProgramAccessRepository;
+import com.fitnessplatform.purchase.PurchaseRepository;
 import com.fitnessplatform.user.User;
 import com.fitnessplatform.user.UserRepository;
 import com.fitnessplatform.user.UserRole;
@@ -37,8 +39,17 @@ class PasswordResetConcurrencyIntegrationTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private ProgramAccessRepository programAccessRepository;
+
+    @Autowired
+    private PurchaseRepository purchaseRepository;
+
     @BeforeEach
     void cleanDatabase() {
+        programAccessRepository.deleteAll();
+        purchaseRepository.deleteAll();
+
         tokenRepository.deleteAll();
         userRepository.deleteAll();
     }
