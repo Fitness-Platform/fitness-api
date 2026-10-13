@@ -4,6 +4,7 @@ import com.fitnessplatform.TestcontainersConfiguration;
 import com.fitnessplatform.auth.passwordreset.PasswordResetTokenRepository;
 import com.fitnessplatform.program.Program;
 import com.fitnessplatform.program.ProgramRepository;
+import com.fitnessplatform.purchase.PurchaseRepository;
 import com.fitnessplatform.user.User;
 import com.fitnessplatform.user.UserRepository;
 import com.fitnessplatform.user.UserRole;
@@ -44,9 +45,13 @@ class ProgramAccessIntegrationTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private PurchaseRepository purchaseRepository;
+
     @BeforeEach
     void cleanDatabase() {
         programAccessRepository.deleteAll();
+        purchaseRepository.deleteAll();
 
         passwordResetTokenRepository.deleteAll();
         userRepository.deleteAll();
