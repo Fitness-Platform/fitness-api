@@ -7,6 +7,7 @@ import com.fitnessplatform.program.ProgramRepository;
 import com.fitnessplatform.user.User;
 import com.fitnessplatform.user.UserRepository;
 import com.fitnessplatform.user.UserRole;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,9 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -39,6 +43,9 @@ class PurchaseIntegrationTest {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @BeforeEach
     void cleanDatabase() {
@@ -612,6 +619,260 @@ class PurchaseIntegrationTest {
 
         assertNull(persisted.getPaidAt());
         assertNull(persisted.getStripePaymentIntentId());
+    }
+
+    @Test
+    void shouldListOnlyPurchasesBelongingToUser() {
+        User member = createUser("member@example.com");
+        User anotherMember = createUser("another@example.com");
+
+        Program program = createProgram("Strength Program");
+
+        Purchase firstPurchase = purchaseRepository.saveAndFlush(
+                new Purchase(member, program, 8900L, "USD")
+        );
+
+        Purchase secondPurchase = purchaseRepository.saveAndFlush(
+                new Purchase(member, program, 9900L, "USD")
+        );
+
+        Purchase anotherMemberPurchase = purchaseRepository.saveAndFlush(
+                new Purchase(anotherMember, program, 7900L, "USD")
+        );
+
+        List<Purchase> purchases =
+                purchaseRepository.findAllByUserIdForMember(member.getId());
+
+        assertEquals(2, purchases.size());
+
+        assertTrue(
+                purchases.stream()
+                        .allMatch(purchase ->
+                                purchase.getUser().getId().equals(member.getId()))
+        );
+
+        assertTrue(
+                purchases.stream()
+                        .anyMatch(purchase ->
+                                purchase.getId().equals(firstPurchase.getId()))
+        );
+
+        assertTrue(
+                purchases.stream()
+                        .anyMatch(purchase ->
+                                purchase.getId().equals(secondPurchase.getId()))
+        );
+
+        assertFalse(
+                purchases.stream()
+                        .anyMatch(purchase ->
+                                purchase.getId().equals(anotherMemberPurchase.getId()))
+        );
+    }
+
+    @Test
+    void shouldListPurchasesOrderedByCreationDateDescending()
+            throws InterruptedException {
+
+        User member = createUser("member@example.com");
+        Program program = createProgram("Strength Program");
+
+        Purchase olderPurchase = purchaseRepository.saveAndFlush(
+                new Purchase(member, program, 8900L, "USD")
+        );
+
+        Thread.sleep(20);
+
+        Purchase newerPurchase = purchaseRepository.saveAndFlush(
+                new Purchase(member, program, 9900L, "USD")
+        );
+
+        List<Purchase> purchases =
+                purchaseRepository.findAllByUserIdForMember(member.getId());
+
+        assertEquals(2, purchases.size());
+
+        assertEquals(newerPurchase.getId(), purchases.get(0).getId());
+        assertEquals(olderPurchase.getId(), purchases.get(1).getId());
+
+        assertTrue(
+                !purchases.get(0).getCreatedAt()
+                        .isBefore(purchases.get(1).getCreatedAt())
+        );
+    }
+
+    @Test
+    void shouldFindPurchaseByIdAndOwner() {
+        User member = createUser("member@example.com");
+        Program program = createProgram("Strength Program");
+
+        Purchase purchase = purchaseRepository.saveAndFlush(
+                new Purchase(member, program, 8900L, "USD")
+        );
+
+        Optional<Purchase> result =
+                purchaseRepository.findByIdAndUserIdForMember(
+                        purchase.getId(),
+                        member.getId()
+                );
+
+        assertTrue(result.isPresent());
+
+        Purchase found = result.orElseThrow();
+
+        assertEquals(purchase.getId(), found.getId());
+        assertEquals(member.getId(), found.getUser().getId());
+        assertEquals(program.getId(), found.getProgram().getId());
+        assertEquals("Strength Program", found.getProgram().getName());
+        assertEquals(8900L, found.getAmountCents());
+        assertEquals("USD", found.getCurrency());
+        assertEquals(PurchaseStatus.PENDING, found.getStatus());
+    }
+
+    @Test
+    void shouldNotFindPurchaseBelongingToAnotherUser() {
+        User owner = createUser("owner@example.com");
+        User anotherMember = createUser("another@example.com");
+
+        Program program = createProgram("Strength Program");
+
+        Purchase purchase = purchaseRepository.saveAndFlush(
+                new Purchase(owner, program, 8900L, "USD")
+        );
+
+        Optional<Purchase> result =
+                purchaseRepository.findByIdAndUserIdForMember(
+                        purchase.getId(),
+                        anotherMember.getId()
+                );
+
+        assertTrue(result.isEmpty());
+
+        assertTrue(purchaseRepository.existsById(purchase.getId()));
+    }
+
+    @Test
+    void shouldListPurchasesFromDifferentUsersForAdmin() {
+        User firstUser = createUser("first@example.com");
+        User secondUser = createUser("second@example.com");
+
+        Program program = createProgram("Strength Program");
+
+        Purchase firstPurchase = purchaseRepository.saveAndFlush(
+                new Purchase(firstUser, program, 8900L, "USD")
+        );
+
+        Purchase secondPurchase = purchaseRepository.saveAndFlush(
+                new Purchase(secondUser, program, 9900L, "USD")
+        );
+
+        List<Purchase> purchases = purchaseRepository.findAllForAdmin();
+
+        assertEquals(2, purchases.size());
+
+        assertTrue(
+                purchases.stream()
+                        .anyMatch(purchase ->
+                                purchase.getId().equals(firstPurchase.getId()))
+        );
+
+        assertTrue(
+                purchases.stream()
+                        .anyMatch(purchase ->
+                                purchase.getId().equals(secondPurchase.getId()))
+        );
+
+        assertTrue(
+                purchases.stream()
+                        .anyMatch(purchase ->
+                                purchase.getUser().getId().equals(firstUser.getId()))
+        );
+
+        assertTrue(
+                purchases.stream()
+                        .anyMatch(purchase ->
+                                purchase.getUser().getId().equals(secondUser.getId()))
+        );
+    }
+
+    @Test
+    void shouldFindPurchaseByIdForAdmin() {
+        User buyer = createUser("buyer@example.com");
+        Program program = createProgram("Strength Program");
+
+        Purchase purchase = purchaseRepository.saveAndFlush(
+                new Purchase(buyer, program, 8900L, "USD")
+        );
+
+        Optional<Purchase> result =
+                purchaseRepository.findByIdForAdmin(purchase.getId());
+
+        assertTrue(result.isPresent());
+
+        Purchase found = result.orElseThrow();
+
+        assertEquals(purchase.getId(), found.getId());
+        assertEquals(buyer.getId(), found.getUser().getId());
+        assertEquals(program.getId(), found.getProgram().getId());
+        assertEquals("Strength Program", found.getProgram().getName());
+        assertEquals(8900L, found.getAmountCents());
+        assertEquals("USD", found.getCurrency());
+        assertEquals(PurchaseStatus.PENDING, found.getStatus());
+    }
+
+    @Test
+    void shouldReturnEmptyWhenAdminPurchaseDoesNotExist() {
+        UUID purchaseId = UUID.randomUUID();
+
+        Optional<Purchase> result =
+                purchaseRepository.findByIdForAdmin(purchaseId);
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void shouldListAdminPurchasesOrderedByCreationDateDescending() {
+        User buyer = createUser("buyer@example.com");
+        Program program = createProgram("Strength Program");
+
+        Purchase olderPurchase = purchaseRepository.saveAndFlush(
+                new Purchase(buyer, program, 8900L, "USD")
+        );
+
+        Purchase newerPurchase = purchaseRepository.saveAndFlush(
+                new Purchase(buyer, program, 9900L, "USD")
+        );
+
+        jdbcTemplate.update(
+                "UPDATE purchases SET created_at = ? WHERE id = ?",
+                java.sql.Timestamp.from(
+                        Instant.parse("2026-01-01T12:00:00Z")
+                ),
+                olderPurchase.getId()
+        );
+
+        jdbcTemplate.update(
+                "UPDATE purchases SET created_at = ? WHERE id = ?",
+                java.sql.Timestamp.from(
+                        Instant.parse("2026-02-01T12:00:00Z")
+                ),
+                newerPurchase.getId()
+        );
+
+        List<Purchase> purchases =
+                purchaseRepository.findAllForAdmin();
+
+        assertEquals(2, purchases.size());
+
+        assertEquals(
+                newerPurchase.getId(),
+                purchases.get(0).getId()
+        );
+
+        assertEquals(
+                olderPurchase.getId(),
+                purchases.get(1).getId()
+        );
     }
 
     private User createUser(
