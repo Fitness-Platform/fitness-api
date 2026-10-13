@@ -4,6 +4,8 @@ import com.fitnessplatform.TestcontainersConfiguration;
 import com.fitnessplatform.auth.passwordreset.PasswordResetTokenRepository;
 import com.fitnessplatform.program.Program;
 import com.fitnessplatform.program.ProgramRepository;
+import com.fitnessplatform.purchase.Purchase;
+import com.fitnessplatform.purchase.PurchaseRepository;
 import com.fitnessplatform.user.User;
 import com.fitnessplatform.user.UserRepository;
 import com.fitnessplatform.user.UserRole;
@@ -15,6 +17,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -55,9 +58,13 @@ class ProgramAccessAuthorizationIntegrationTest {
     private PasswordResetTokenRepository
             passwordResetTokenRepository;
 
+    @Autowired
+    private PurchaseRepository purchaseRepository;
+
     @BeforeEach
     void cleanDatabase() {
         programAccessRepository.deleteAll();
+        purchaseRepository.deleteAll();
 
         passwordResetTokenRepository.deleteAll();
         userRepository.deleteAll();
@@ -736,6 +743,76 @@ class ProgramAccessAuthorizationIntegrationTest {
         );
     }
 
+    @Test
+    void shouldPersistProgramAccessLinkedToPurchase() {
+        User user = createUser("member@example.com");
+        Program program = createProgram("Strength Program");
+        Purchase purchase = createPurchase(user, program);
+
+        Instant startsAt = Instant.parse("2026-10-13T12:00:00Z");
+        Instant expiresAt = Instant.parse("2027-04-13T12:00:00Z");
+
+        ProgramAccess access = programAccessRepository.saveAndFlush(
+                new ProgramAccess(purchase, startsAt, expiresAt)
+        );
+
+        ProgramAccess persisted = programAccessRepository
+                .findByPurchaseId(purchase.getId())
+                .orElseThrow();
+
+        assertEquals(access.getId(), persisted.getId());
+        assertNotNull(persisted.getPurchase());
+        assertEquals(purchase.getId(), persisted.getPurchase().getId());
+        assertEquals(user.getId(), persisted.getUser().getId());
+        assertEquals(program.getId(), persisted.getProgram().getId());
+        assertEquals(startsAt, persisted.getStartsAt());
+        assertEquals(expiresAt, persisted.getExpiresAt());
+    }
+
+    @Test
+    void shouldRejectDuplicateProgramAccessForSamePurchase() {
+        User user = createUser("member@example.com");
+        Program program = createProgram("Strength Program");
+        Purchase purchase = createPurchase(user, program);
+
+        Instant startsAt = Instant.parse("2026-10-13T12:00:00Z");
+        Instant expiresAt = Instant.parse("2027-04-13T12:00:00Z");
+
+        programAccessRepository.saveAndFlush(
+                new ProgramAccess(purchase, startsAt, expiresAt)
+        );
+
+        assertThrows(
+                DataIntegrityViolationException.class,
+                () -> programAccessRepository.saveAndFlush(
+                        new ProgramAccess(purchase, startsAt, expiresAt)
+                )
+        );
+    }
+
+    @Test
+    void shouldPreserveAdministrativeAccessWithoutPurchase() {
+        User user = createUser("member@example.com");
+        Program program = createProgram("Strength Program");
+
+        ProgramAccess access = programAccessRepository.saveAndFlush(
+                new ProgramAccess(
+                        user,
+                        program,
+                        Instant.parse("2026-10-13T12:00:00Z"),
+                        null
+                )
+        );
+
+        ProgramAccess persisted = programAccessRepository
+                .findById(access.getId())
+                .orElseThrow();
+
+        assertNull(persisted.getPurchase());
+        assertEquals(user.getId(), persisted.getUser().getId());
+        assertEquals(program.getId(), persisted.getProgram().getId());
+    }
+
     private User createUser(
             String email
     ) {
@@ -772,6 +849,12 @@ class ProgramAccessAuthorizationIntegrationTest {
                         startsAt,
                         expiresAt
                 )
+        );
+    }
+
+    private Purchase createPurchase(User user, Program program) {
+        return purchaseRepository.saveAndFlush(
+                new Purchase(user, program, 8900L, "USD")
         );
     }
 }

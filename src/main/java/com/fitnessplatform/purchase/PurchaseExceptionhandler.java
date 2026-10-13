@@ -62,4 +62,19 @@ public class PurchaseExceptionhandler {
 
         return problem;
     }
+
+    @ExceptionHandler(PurchasePaymentConfirmationException.class)
+    ProblemDetail handlePurchasePaymentConfirmation(
+            PurchasePaymentConfirmationException exception
+    ) {
+        ProblemDetail problem =
+                ProblemDetail.forStatusAndDetail(
+                        HttpStatus.INTERNAL_SERVER_ERROR,
+                        "Unable to confirm purchase payment"
+                );
+
+        problem.setTitle("Purchase payment confirmation failed");
+
+        return problem;
+    }
 }
