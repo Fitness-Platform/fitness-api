@@ -1,6 +1,8 @@
 package com.fitnessplatform.purchase;
 
 import com.fitnessplatform.TestcontainersConfiguration;
+import com.fitnessplatform.access.ProgramAccess;
+import com.fitnessplatform.access.ProgramAccessRepository;
 import com.fitnessplatform.auth.passwordreset.PasswordResetTokenRepository;
 import com.fitnessplatform.program.Program;
 import com.fitnessplatform.program.ProgramRepository;
@@ -22,9 +24,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
 @Import({
@@ -62,8 +62,12 @@ class PurchasePaymentServiceTest {
     private PasswordEncoder
             passwordEncoder;
 
+    @Autowired
+    private ProgramAccessRepository programAccessRepository;
+
     @BeforeEach
     void cleanDatabase() {
+        programAccessRepository.deleteAll();
         purchaseRepository.deleteAll();
 
         passwordResetTokenRepository.deleteAll();
@@ -138,6 +142,20 @@ class PurchasePaymentServiceTest {
                 "cs_test_123",
                 persisted.getStripeCheckoutSessionId()
         );
+
+        ProgramAccess access = programAccessRepository
+                .findByPurchaseId(purchase.getId())
+                .orElseThrow();
+
+        assertEquals(purchase.getId(), access.getPurchase().getId());
+        assertEquals(user.getId(), access.getUser().getId());
+        assertEquals(program.getId(), access.getProgram().getId());
+        assertEquals(NOW, access.getStartsAt());
+        assertEquals(
+                Instant.parse("2027-04-09T12:00:00Z"),
+                access.getExpiresAt()
+        );
+        assertNull(access.getRevokedAt());
     }
 
     @Test
@@ -166,6 +184,11 @@ class PurchasePaymentServiceTest {
                         "cs_test_123",
                         "pi_test_123"
                 );
+
+        ProgramAccess initialAccess = programAccessRepository
+                .findByPurchaseId(purchase.getId())
+                .orElseThrow();
+        UUID initialAccessId = initialAccess.getId();
 
         purchasePaymentService
                 .completeSuccessfulPurchase(
@@ -200,6 +223,18 @@ class PurchasePaymentServiceTest {
                 "cs_test_123",
                 persisted.getStripeCheckoutSessionId()
         );
+
+        ProgramAccess persistedAccess = programAccessRepository
+                .findByPurchaseId(purchase.getId())
+                .orElseThrow();
+
+        assertEquals(initialAccessId, persistedAccess.getId());
+        assertEquals(NOW, persistedAccess.getStartsAt());
+        assertEquals(
+                Instant.parse("2027-04-09T12:00:00Z"),
+                persistedAccess.getExpiresAt()
+        );
+        assertEquals(1L, programAccessRepository.count());
     }
 
     @Test
@@ -252,6 +287,10 @@ class PurchasePaymentServiceTest {
         assertNull(
                 persisted.getStripePaymentIntentId()
         );
+
+        assertTrue(programAccessRepository
+                .findByPurchaseId(purchase.getId())
+                .isEmpty());
     }
 
     @Test
@@ -267,6 +306,155 @@ class PurchasePaymentServiceTest {
                                         "pi_test_123"
                                 )
         );
+
+        assertEquals(0L, programAccessRepository.count());
+    }
+
+    @Test
+    void shouldRejectRepeatedConfirmationWithDifferentPaymentIntent() {
+        User user = createUser("member@example.com");
+        Program program = createProgram("Six Week Strength");
+        Purchase purchase = createPendingPurchase(user, program, "cs_test_123");
+
+        purchasePaymentService.completeSuccessfulPurchase(
+                purchase.getId(), "cs_test_123", "pi_test_123"
+        );
+
+        ProgramAccess existingAccess = programAccessRepository
+                .findByPurchaseId(purchase.getId())
+                .orElseThrow();
+
+        assertThrows(
+                PurchasePaymentConfirmationException.class,
+                () -> purchasePaymentService.completeSuccessfulPurchase(
+                        purchase.getId(), "cs_test_123", "pi_test_other"
+                )
+        );
+
+        Purchase persisted = purchaseRepository.findById(purchase.getId())
+                .orElseThrow();
+        ProgramAccess persistedAccess = programAccessRepository
+                .findByPurchaseId(purchase.getId())
+                .orElseThrow();
+
+        assertEquals(PurchaseStatus.PAID, persisted.getStatus());
+        assertEquals(NOW, persisted.getPaidAt());
+        assertEquals("pi_test_123", persisted.getStripePaymentIntentId());
+        assertEquals(existingAccess.getId(), persistedAccess.getId());
+        assertEquals(1L, programAccessRepository.count());
+    }
+
+    @Test
+    void shouldGrantMissingAccessForAlreadyPaidPurchase() {
+        User user = createUser("member@example.com");
+        Program program = createProgram("Six Week Strength");
+
+        Purchase purchase = createPendingPurchase(
+                user,
+                program,
+                "cs_test_123"
+        );
+
+        Instant originalPaidAt =
+                Instant.parse("2026-09-15T12:00:00Z");
+
+        purchase.markPaid(
+                originalPaidAt,
+                "pi_test_123"
+        );
+
+        purchaseRepository.saveAndFlush(purchase);
+
+        assertTrue(
+                programAccessRepository
+                        .findByPurchaseId(purchase.getId())
+                        .isEmpty()
+        );
+
+        purchasePaymentService.completeSuccessfulPurchase(
+                purchase.getId(),
+                "cs_test_123",
+                "pi_test_123"
+        );
+
+        Purchase persisted = purchaseRepository
+                .findById(purchase.getId())
+                .orElseThrow();
+
+        ProgramAccess access = programAccessRepository
+                .findByPurchaseId(purchase.getId())
+                .orElseThrow();
+
+        assertEquals(PurchaseStatus.PAID, persisted.getStatus());
+        assertEquals(originalPaidAt, persisted.getPaidAt());
+        assertEquals("pi_test_123", persisted.getStripePaymentIntentId());
+
+        assertEquals(originalPaidAt, access.getStartsAt());
+
+        assertEquals(
+                Instant.parse("2027-03-15T12:00:00Z"),
+                access.getExpiresAt()
+        );
+
+        assertEquals(1L, programAccessRepository.count());
+    }
+
+    @Test
+    void shouldGrantSeparateAccessesForDifferentPurchases() {
+        User user = createUser("member@example.com");
+        Program program = createProgram("Six Week Strength");
+
+        Purchase firstPurchase = createPendingPurchase(
+                user,
+                program,
+                "cs_test_first"
+        );
+
+        Purchase secondPurchase = createPendingPurchase(
+                user,
+                program,
+                "cs_test_second"
+        );
+
+        purchasePaymentService.completeSuccessfulPurchase(
+                firstPurchase.getId(),
+                "cs_test_first",
+                "pi_test_first"
+        );
+
+        purchasePaymentService.completeSuccessfulPurchase(
+                secondPurchase.getId(),
+                "cs_test_second",
+                "pi_test_second"
+        );
+
+        ProgramAccess firstAccess = programAccessRepository
+                .findByPurchaseId(firstPurchase.getId())
+                .orElseThrow();
+
+        ProgramAccess secondAccess = programAccessRepository
+                .findByPurchaseId(secondPurchase.getId())
+                .orElseThrow();
+
+        assertNotEquals(firstAccess.getId(), secondAccess.getId());
+
+        assertEquals(
+                firstPurchase.getId(),
+                firstAccess.getPurchase().getId()
+        );
+
+        assertEquals(
+                secondPurchase.getId(),
+                secondAccess.getPurchase().getId()
+        );
+
+        assertEquals(user.getId(), firstAccess.getUser().getId());
+        assertEquals(user.getId(), secondAccess.getUser().getId());
+
+        assertEquals(program.getId(), firstAccess.getProgram().getId());
+        assertEquals(program.getId(), secondAccess.getProgram().getId());
+
+        assertEquals(2L, programAccessRepository.count());
     }
 
     private Purchase createPendingPurchase(

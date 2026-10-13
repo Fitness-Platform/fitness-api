@@ -6,6 +6,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface ProgramAccessRepository extends JpaRepository<ProgramAccess, UUID> {
@@ -74,5 +75,9 @@ public interface ProgramAccessRepository extends JpaRepository<ProgramAccess, UU
 
             @Param("now")
             Instant now
+    );
+
+    Optional<ProgramAccess> findByPurchaseId(
+            UUID purchaseId
     );
 }

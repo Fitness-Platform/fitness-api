@@ -1,9 +1,14 @@
 package com.fitnessplatform.purchase.stripe;
 
 import com.fitnessplatform.TestcontainersConfiguration;
+import com.fitnessplatform.access.ProgramAccess;
+import com.fitnessplatform.access.ProgramAccessRepository;
+import com.fitnessplatform.auth.JwtService;
 import com.fitnessplatform.auth.passwordreset.PasswordResetTokenRepository;
 import com.fitnessplatform.program.Program;
 import com.fitnessplatform.program.ProgramRepository;
+import com.fitnessplatform.program.ProgramWeek;
+import com.fitnessplatform.program.ProgramWeekRepository;
 import com.fitnessplatform.purchase.Purchase;
 import com.fitnessplatform.purchase.PurchaseRepository;
 import com.fitnessplatform.purchase.PurchaseStatus;
@@ -12,6 +17,7 @@ import com.fitnessplatform.user.UserRepository;
 import com.fitnessplatform.user.UserRole;
 import com.stripe.Stripe;
 import com.stripe.net.Webhook;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,10 +34,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -43,9 +51,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class StripePurchaseWebhookIntegrationTest {
 
     private static final Instant NOW =
-            Instant.parse(
-                    "2026-10-09T12:00:00Z"
-            );
+            Instant.parse("2026-10-09T12:00:00Z");
 
     @Autowired
     private MockMvc mockMvc;
@@ -57,76 +63,239 @@ class StripePurchaseWebhookIntegrationTest {
     private PurchaseRepository purchaseRepository;
 
     @Autowired
+    private ProgramAccessRepository programAccessRepository;
+
+    @Autowired
     private UserRepository userRepository;
 
     @Autowired
     private ProgramRepository programRepository;
 
     @Autowired
-    private PasswordResetTokenRepository
-            passwordResetTokenRepository;
+    private ProgramWeekRepository programWeekRepository;
+
+    @Autowired
+    private JwtService jwtService;
+
+    @Autowired
+    private PasswordResetTokenRepository passwordResetTokenRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
 
     @BeforeEach
     void cleanDatabase() {
+        programAccessRepository.deleteAll();
         purchaseRepository.deleteAll();
+        programWeekRepository.deleteAll();
 
         passwordResetTokenRepository.deleteAll();
         userRepository.deleteAll();
-
         programRepository.deleteAll();
     }
 
     @TestConfiguration(proxyBeanMethods = false)
     static class FixedClockConfiguration {
-
         @Bean
         @Primary
         Clock fixedClock() {
-            return Clock.fixed(
-                    NOW,
-                    ZoneOffset.UTC
-            );
+            return Clock.fixed(NOW, ZoneOffset.UTC);
         }
     }
 
     @Test
-    void shouldMarkPurchaseAsPaidFromSuccessfulStripeWebhook()
+    void shouldMarkPurchasePaidAndGrantAccessFromSuccessfulStripeWebhook()
             throws Exception {
-
-        User user =
-                createUser(
-                        "member@example.com"
-                );
-
-        Program program =
-                createProgram(
-                        "Six Week Strength"
-                );
-
-        Purchase purchase =
-                new Purchase(
-                        user,
-                        program,
-                        8900L,
-                        "USD"
-                );
-
-        purchase.attachStripeCheckoutSession(
-                "cs_test_paid_123"
+        Purchase purchase = createPendingPurchase("cs_test_paid_123");
+        String payload = completedSessionPayload(
+                purchase.getId(), "cs_test_paid_123", "pi_test_paid_123"
         );
 
-        purchase =
-                purchaseRepository.saveAndFlush(
-                        purchase
-                );
+        postSignedWebhook(payload, signatureFor(payload), 200);
 
-        String payload =
-                """
+        Purchase persisted = purchaseRepository.findById(purchase.getId())
+                .orElseThrow();
+        assertEquals(PurchaseStatus.PAID, persisted.getStatus());
+        assertEquals(NOW, persisted.getPaidAt());
+        assertEquals("cs_test_paid_123", persisted.getStripeCheckoutSessionId());
+        assertEquals("pi_test_paid_123", persisted.getStripePaymentIntentId());
+        assertNotNull(persisted.getUpdatedAt());
+
+        ProgramAccess access = programAccessRepository
+                .findByPurchaseId(purchase.getId()).orElseThrow();
+        assertEquals(purchase.getId(), access.getPurchase().getId());
+        assertEquals(purchase.getUser().getId(), access.getUser().getId());
+        assertEquals(purchase.getProgram().getId(), access.getProgram().getId());
+        assertEquals(NOW, access.getStartsAt());
+        assertEquals(Instant.parse("2027-04-09T12:00:00Z"), access.getExpiresAt());
+        assertNull(access.getRevokedAt());
+        assertEquals(1L, programAccessRepository.count());
+    }
+
+    @Test
+    void shouldDeliverPurchasedProgramToMemberAfterWebhook()
+            throws Exception {
+        Purchase purchase = createPendingPurchase("cs_test_delivery_123");
+        User buyer = purchase.getUser();
+        Program program = purchase.getProgram();
+
+        program.publish();
+        programRepository.saveAndFlush(program);
+
+        programWeekRepository.saveAndFlush(
+                new ProgramWeek(program, "Week 1", null, 1)
+        );
+        programWeekRepository.saveAndFlush(
+                new ProgramWeek(program, "Week 2", null, 2)
+        );
+
+        Cookie memberCookie = new Cookie(
+                "AUTH_TOKEN",
+                jwtService.generateToken(buyer.getId())
+        );
+
+        // The buyer cannot see the program before payment confirmation.
+        mockMvc.perform(get("/api/me/programs").cookie(memberCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+
+        String payload = completedSessionPayload(
+                purchase.getId(),
+                "cs_test_delivery_123",
+                "pi_test_delivery_123"
+        );
+        postSignedWebhook(payload, signatureFor(payload), 200);
+
+        Purchase persisted = purchaseRepository.findById(purchase.getId())
+                .orElseThrow();
+        assertEquals(PurchaseStatus.PAID, persisted.getStatus());
+
+        ProgramAccess access = programAccessRepository
+                .findByPurchaseId(purchase.getId())
+                .orElseThrow();
+        assertEquals(buyer.getId(), access.getUser().getId());
+        assertEquals(program.getId(), access.getProgram().getId());
+
+        // The member's own authenticated listing now includes the purchase.
+        mockMvc.perform(get("/api/me/programs").cookie(memberCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].programId")
+                        .value(program.getId().toString()))
+                .andExpect(jsonPath("$[0].name").value("Six Week Strength"))
+                .andExpect(jsonPath("$[0].accessStartsAt")
+                        .value("2026-10-09T12:00:00Z"))
+                .andExpect(jsonPath("$[0].accessExpiresAt")
+                        .value("2027-04-09T12:00:00Z"));
+
+        // Progressive unlock follows the purchased access start date.
+        mockMvc.perform(get("/api/me/programs/{programId}", program.getId())
+                        .cookie(memberCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.weeks.length()").value(2))
+                .andExpect(jsonPath("$.weeks[0].position").value(1))
+                .andExpect(jsonPath("$.weeks[0].unlocked").value(true))
+                .andExpect(jsonPath("$.weeks[0].unlocksAt")
+                        .value("2026-10-09T12:00:00Z"))
+                .andExpect(jsonPath("$.weeks[1].position").value(2))
+                .andExpect(jsonPath("$.weeks[1].unlocked").value(false))
+                .andExpect(jsonPath("$.weeks[1].unlocksAt")
+                        .value("2026-10-16T12:00:00Z"));
+    }
+
+    @Test
+    void shouldNotDuplicateProgramAccessOnRepeatedStripeWebhook()
+            throws Exception {
+        Purchase purchase = createPendingPurchase("cs_test_retry_123");
+        String payload = completedSessionPayload(
+                purchase.getId(), "cs_test_retry_123", "pi_test_retry_123"
+        );
+        String signature = signatureFor(payload);
+
+        postSignedWebhook(payload, signature, 200);
+        UUID originalAccessId = programAccessRepository
+                .findByPurchaseId(purchase.getId()).orElseThrow().getId();
+
+        postSignedWebhook(payload, signature, 200);
+
+        ProgramAccess access = programAccessRepository
+                .findByPurchaseId(purchase.getId()).orElseThrow();
+        assertEquals(originalAccessId, access.getId());
+        assertEquals(NOW, access.getStartsAt());
+        assertEquals(Instant.parse("2027-04-09T12:00:00Z"), access.getExpiresAt());
+        assertEquals(1L, programAccessRepository.count());
+    }
+
+    @Test
+    void shouldRejectConflictingPaymentIntentWithoutChangingPurchaseOrAccess()
+            throws Exception {
+        Purchase purchase = createPendingPurchase("cs_test_conflict_123");
+        String validPayload = completedSessionPayload(
+                purchase.getId(), "cs_test_conflict_123", "pi_test_original"
+        );
+        postSignedWebhook(validPayload, signatureFor(validPayload), 200);
+        UUID originalAccessId = programAccessRepository
+                .findByPurchaseId(purchase.getId()).orElseThrow().getId();
+
+        String conflictingPayload = completedSessionPayload(
+                purchase.getId(), "cs_test_conflict_123", "pi_test_different"
+        );
+        postSignedWebhook(conflictingPayload, signatureFor(conflictingPayload), 500);
+
+        Purchase persisted = purchaseRepository.findById(purchase.getId())
+                .orElseThrow();
+        assertEquals(PurchaseStatus.PAID, persisted.getStatus());
+        assertEquals(NOW, persisted.getPaidAt());
+        assertEquals("pi_test_original", persisted.getStripePaymentIntentId());
+        assertEquals(originalAccessId, programAccessRepository
+                .findByPurchaseId(purchase.getId()).orElseThrow().getId());
+        assertEquals(1L, programAccessRepository.count());
+    }
+
+    @Test
+    void shouldRejectInvalidSignatureWithoutProcessingPayment()
+            throws Exception {
+        Purchase purchase = createPendingPurchase("cs_test_bad_signature");
+        String payload = completedSessionPayload(
+                purchase.getId(), "cs_test_bad_signature", "pi_test_bad_signature"
+        );
+        // Signature generated for a different body: should fail verification.
+        String invalidSignature = signatureFor("different payload");
+
+        postSignedWebhook(payload, invalidSignature, 400);
+
+        Purchase persisted = purchaseRepository.findById(purchase.getId())
+                .orElseThrow();
+        assertEquals(PurchaseStatus.PENDING, persisted.getStatus());
+        assertNull(persisted.getPaidAt());
+        assertNull(persisted.getStripePaymentIntentId());
+        assertTrue(programAccessRepository.findByPurchaseId(purchase.getId()).isEmpty());
+    }
+
+    private void postSignedWebhook(String payload, String signature, int expectedStatus)
+            throws Exception {
+        mockMvc.perform(post("/api/webhooks/stripe")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Stripe-Signature", signature)
+                        .content(payload))
+                .andExpect(status().is(expectedStatus));
+    }
+
+    private String signatureFor(String payload)
+            throws Exception {
+
+        return Webhook.Signature.generateSignatureHeader(
+                payload,
+                stripeProperties.webhookSecret()
+        );
+    }
+
+    private String completedSessionPayload(
+            UUID purchaseId, String checkoutSessionId, String paymentIntentId
+    ) {
+        return """
                 {
-                  "id": "evt_test_paid_123",
+                  "id": "evt_test_completed_123",
                   "object": "event",
                   "api_version": "%s",
                   "created": 1791547200,
@@ -135,100 +304,38 @@ class StripePurchaseWebhookIntegrationTest {
                   "type": "checkout.session.completed",
                   "data": {
                     "object": {
-                      "id": "cs_test_paid_123",
+                      "id": "%s",
                       "object": "checkout.session",
                       "client_reference_id": "%s",
                       "mode": "payment",
                       "payment_status": "paid",
-                      "payment_intent": "pi_test_paid_123"
+                      "payment_intent": "%s"
                     }
                   }
                 }
                 """.formatted(
-                        Stripe.API_VERSION,
-                        purchase.getId()
-                );
-
-        String signature =
-                Webhook.Signature
-                        .generateSignatureHeader(
-                                payload,
-                                stripeProperties.webhookSecret()
-                        );
-
-        mockMvc.perform(
-                        post(
-                                "/api/webhooks/stripe"
-                        )
-                                .contentType(
-                                        MediaType.APPLICATION_JSON
-                                )
-                                .header(
-                                        "Stripe-Signature",
-                                        signature
-                                )
-                                .content(
-                                        payload
-                                )
-                )
-                .andExpect(
-                        status().isOk()
-                );
-
-        Purchase persisted =
-                purchaseRepository
-                        .findById(
-                                purchase.getId()
-                        )
-                        .orElseThrow();
-
-        assertEquals(
-                PurchaseStatus.PAID,
-                persisted.getStatus()
-        );
-
-        assertEquals(
-                NOW,
-                persisted.getPaidAt()
-        );
-
-        assertEquals(
-                "cs_test_paid_123",
-                persisted.getStripeCheckoutSessionId()
-        );
-
-        assertEquals(
-                "pi_test_paid_123",
-                persisted.getStripePaymentIntentId()
-        );
-
-        assertNotNull(
-                persisted.getUpdatedAt()
+                Stripe.API_VERSION,
+                checkoutSessionId,
+                purchaseId,
+                paymentIntentId
         );
     }
 
-    private User createUser(
-            String email
-    ) {
+    private Purchase createPendingPurchase(String checkoutSessionId) {
+        User user = createUser("member@example.com");
+        Program program = createProgram("Six Week Strength");
+        Purchase purchase = new Purchase(user, program, 8900L, "USD");
+        purchase.attachStripeCheckoutSession(checkoutSessionId);
+        return purchaseRepository.saveAndFlush(purchase);
+    }
+
+    private User createUser(String email) {
         return userRepository.saveAndFlush(
-                new User(
-                        email,
-                        passwordEncoder.encode(
-                                "StrongPassword123!"
-                        ),
-                        UserRole.USER
-                )
+                new User(email, passwordEncoder.encode("StrongPassword123!"), UserRole.USER)
         );
     }
 
-    private Program createProgram(
-            String name
-    ) {
-        return programRepository.saveAndFlush(
-                new Program(
-                        name,
-                        null
-                )
-        );
+    private Program createProgram(String name) {
+        return programRepository.saveAndFlush(new Program(name, null));
     }
 }

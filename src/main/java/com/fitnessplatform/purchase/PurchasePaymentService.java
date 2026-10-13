@@ -1,5 +1,6 @@
 package com.fitnessplatform.purchase;
 
+import com.fitnessplatform.access.PurchasedProgramAccessService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -10,21 +11,21 @@ import java.util.UUID;
 @Service
 public class PurchasePaymentService {
 
-    private final PurchaseRepository
-            purchaseRepository;
+    private final PurchaseRepository purchaseRepository;
 
-    private final Clock
-            clock;
+    private final PurchasedProgramAccessService purchasedProgramAccessService;
+
+    private final Clock clock;
 
     public PurchasePaymentService(
             PurchaseRepository purchaseRepository,
+            PurchasedProgramAccessService purchasedProgramAccessService,
             Clock clock
     ) {
-        this.purchaseRepository =
-                purchaseRepository;
-
-        this.clock =
-                clock;
+        this.purchaseRepository = purchaseRepository;
+        this.purchasedProgramAccessService =
+                purchasedProgramAccessService;
+        this.clock = clock;
     }
 
     @Transactional
@@ -33,39 +34,33 @@ public class PurchasePaymentService {
             String stripeCheckoutSessionId,
             String stripePaymentIntentId
     ) {
-        Purchase purchase =
-                purchaseRepository
-                        .findById(
-                                purchaseId
+        Purchase purchase = purchaseRepository
+                .findById(purchaseId)
+                .orElseThrow(
+                        () -> new PurchasePaymentConfirmationException(
+                                "Purchase not found"
                         )
-                        .orElseThrow(
-                                () ->
-                                        new PurchasePaymentConfirmationException(
-                                                "Purchase not found"
-                                        )
-                        );
+                );
 
         validateCheckoutSession(
                 purchase,
                 stripeCheckoutSessionId
         );
 
-        if (
-                purchase.getStatus()
-                        == PurchaseStatus.PAID
-        ) {
+        if (purchase.getStatus() == PurchaseStatus.PAID) {
             validateRepeatedConfirmation(
                     purchase,
                     stripePaymentIntentId
             );
 
+            purchasedProgramAccessService.grantForPurchase(
+                    purchase
+            );
+
             return;
         }
 
-        if (
-                purchase.getStatus()
-                        != PurchaseStatus.PENDING
-        ) {
+        if (purchase.getStatus() != PurchaseStatus.PENDING) {
             throw new PurchasePaymentConfirmationException(
                     "Purchase is not pending"
             );
@@ -76,7 +71,9 @@ public class PurchasePaymentService {
                 stripePaymentIntentId
         );
 
-        purchaseRepository.saveAndFlush(
+        purchaseRepository.saveAndFlush(purchase);
+
+        purchasedProgramAccessService.grantForPurchase(
                 purchase
         );
     }
@@ -85,12 +82,10 @@ public class PurchasePaymentService {
             Purchase purchase,
             String stripeCheckoutSessionId
     ) {
-        if (
-                !Objects.equals(
-                        purchase.getStripeCheckoutSessionId(),
-                        stripeCheckoutSessionId
-                )
-        ) {
+        if (!Objects.equals(
+                purchase.getStripeCheckoutSessionId(),
+                stripeCheckoutSessionId
+        )) {
             throw new PurchasePaymentConfirmationException(
                     "Stripe Checkout Session does not match Purchase"
             );
@@ -101,12 +96,10 @@ public class PurchasePaymentService {
             Purchase purchase,
             String stripePaymentIntentId
     ) {
-        if (
-                !Objects.equals(
-                        purchase.getStripePaymentIntentId(),
-                        stripePaymentIntentId
-                )
-        ) {
+        if (!Objects.equals(
+                purchase.getStripePaymentIntentId(),
+                stripePaymentIntentId
+        )) {
             throw new PurchasePaymentConfirmationException(
                     "Stripe PaymentIntent does not match paid Purchase"
             );

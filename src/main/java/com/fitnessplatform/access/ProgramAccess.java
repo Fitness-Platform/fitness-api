@@ -1,10 +1,12 @@
 package com.fitnessplatform.access;
 
 import com.fitnessplatform.program.Program;
+import com.fitnessplatform.purchase.Purchase;
 import com.fitnessplatform.user.User;
 import jakarta.persistence.*;
 
 import java.time.Instant;
+import java.util.Objects;
 import java.util.UUID;
 
 @Entity
@@ -27,6 +29,13 @@ public class ProgramAccess {
             nullable = false
     )
     private Program program;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "purchase_id",
+            unique = true
+    )
+    private Purchase purchase;
 
     @Column(
             name = "starts_at",
@@ -68,6 +77,24 @@ public class ProgramAccess {
         this.expiresAt = expiresAt;
     }
 
+    public ProgramAccess(
+            Purchase purchase,
+            Instant startsAt,
+            Instant expiresAt
+    ) {
+        this(
+                Objects.requireNonNull(
+                        purchase,
+                        "Purchase is required"
+                ).getUser(),
+                purchase.getProgram(),
+                startsAt,
+                expiresAt
+        );
+
+        this.purchase = purchase;
+    }
+
     public void revoke(
             Instant revokedAt
     ) {
@@ -97,6 +124,10 @@ public class ProgramAccess {
 
     public Program getProgram() {
         return program;
+    }
+
+    public Purchase getPurchase() {
+        return purchase;
     }
 
     public Instant getStartsAt() {
