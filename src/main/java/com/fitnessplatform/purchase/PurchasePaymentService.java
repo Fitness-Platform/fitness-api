@@ -35,7 +35,7 @@ public class PurchasePaymentService {
             String stripePaymentIntentId
     ) {
         Purchase purchase = purchaseRepository
-                .findById(purchaseId)
+                .findByIdForUpdate(purchaseId)
                 .orElseThrow(
                         () -> new PurchasePaymentConfirmationException(
                                 "Purchase not found"

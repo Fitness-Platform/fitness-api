@@ -2,6 +2,7 @@ package com.fitnessplatform.purchase;
 
 import com.fitnessplatform.purchase.stripe.StripeCheckoutException;
 import com.fitnessplatform.purchase.stripe.StripeWebhookException;
+import com.fitnessplatform.purchase.stripe.StripeWebhookProcessingException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -74,6 +75,21 @@ public class PurchaseExceptionhandler {
                 );
 
         problem.setTitle("Purchase payment confirmation failed");
+
+        return problem;
+    }
+
+    @ExceptionHandler(StripeWebhookProcessingException.class)
+    ProblemDetail handleStripeWebhookProcessing(
+            StripeWebhookProcessingException exception
+    ) {
+        ProblemDetail problem =
+                ProblemDetail.forStatusAndDetail(
+                        HttpStatus.INTERNAL_SERVER_ERROR,
+                        "Unable to process Stripe webhook event"
+                );
+
+        problem.setTitle("Stripe webhook processing failed");
 
         return problem;
     }

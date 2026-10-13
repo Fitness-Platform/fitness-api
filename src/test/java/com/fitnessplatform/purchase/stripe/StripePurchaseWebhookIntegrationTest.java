@@ -28,6 +28,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -55,6 +56,9 @@ class StripePurchaseWebhookIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @Autowired
     private StripeProperties stripeProperties;
@@ -85,6 +89,7 @@ class StripePurchaseWebhookIntegrationTest {
 
     @BeforeEach
     void cleanDatabase() {
+        jdbcTemplate.update("DELETE FROM stripe_webhook_events");
         programAccessRepository.deleteAll();
         purchaseRepository.deleteAll();
         programWeekRepository.deleteAll();
@@ -272,6 +277,101 @@ class StripePurchaseWebhookIntegrationTest {
         assertTrue(programAccessRepository.findByPurchaseId(purchase.getId()).isEmpty());
     }
 
+    @Test
+    void shouldExpirePendingPurchaseFromStripeWebhook() throws Exception {
+        Purchase purchase = createPendingPurchase("cs_test_expiration_123");
+        String payload = expiredSessionPayload(
+                purchase.getId(), "cs_test_expiration_123"
+        );
+
+        postSignedWebhook(payload, signatureFor(payload), 200);
+
+        Purchase persisted = purchaseRepository.findById(purchase.getId())
+                .orElseThrow();
+        assertEquals(PurchaseStatus.EXPIRED, persisted.getStatus());
+        assertNull(persisted.getPaidAt());
+        assertNull(persisted.getStripePaymentIntentId());
+        assertEquals("cs_test_expiration_123", persisted.getStripeCheckoutSessionId());
+        assertTrue(programAccessRepository.findByPurchaseId(purchase.getId()).isEmpty());
+    }
+
+    @Test
+    void shouldNotChangeExpiredPurchaseOnRepeatedExpirationWebhook() throws Exception {
+        Purchase purchase = createPendingPurchase("cs_test_expiration_retry");
+        String payload = expiredSessionPayload(
+                purchase.getId(), "cs_test_expiration_retry"
+        );
+        String signature = signatureFor(payload);
+
+        postSignedWebhook(payload, signature, 200);
+        postSignedWebhook(payload, signature, 200);
+
+        Purchase persisted = purchaseRepository.findById(purchase.getId())
+                .orElseThrow();
+        assertEquals(PurchaseStatus.EXPIRED, persisted.getStatus());
+        assertNull(persisted.getPaidAt());
+        assertNull(persisted.getStripePaymentIntentId());
+        assertTrue(programAccessRepository.findByPurchaseId(purchase.getId()).isEmpty());
+    }
+
+    @Test
+    void shouldNotExpirePaidPurchaseOrRevokeAccess() throws Exception {
+        Purchase purchase = createPendingPurchase("cs_test_paid_then_expired");
+        String completedPayload = completedSessionPayload(
+                purchase.getId(), "cs_test_paid_then_expired", "pi_test_paid_then_expired"
+        );
+        postSignedWebhook(completedPayload, signatureFor(completedPayload), 200);
+
+        UUID accessId = programAccessRepository.findByPurchaseId(purchase.getId())
+                .orElseThrow().getId();
+
+        String expiredPayload = expiredSessionPayload(
+                purchase.getId(), "cs_test_paid_then_expired"
+        );
+        postSignedWebhook(expiredPayload, signatureFor(expiredPayload), 200);
+
+        Purchase persisted = purchaseRepository.findById(purchase.getId())
+                .orElseThrow();
+        assertEquals(PurchaseStatus.PAID, persisted.getStatus());
+        assertEquals(NOW, persisted.getPaidAt());
+        assertEquals("pi_test_paid_then_expired", persisted.getStripePaymentIntentId());
+
+        ProgramAccess access = programAccessRepository.findByPurchaseId(purchase.getId())
+                .orElseThrow();
+        assertEquals(accessId, access.getId());
+        assertNull(access.getRevokedAt());
+        assertEquals(1L, programAccessRepository.count());
+    }
+
+    @Test
+    void shouldRejectExpirationWithMismatchedCheckoutSession() throws Exception {
+        Purchase purchase = createPendingPurchase("cs_test_expected");
+        String payload = expiredSessionPayload(
+                purchase.getId(), "cs_test_unexpected"
+        );
+
+        postSignedWebhook(payload, signatureFor(payload), 500);
+
+        Purchase persisted = purchaseRepository.findById(purchase.getId())
+                .orElseThrow();
+        assertEquals(PurchaseStatus.PENDING, persisted.getStatus());
+        assertEquals("cs_test_expected", persisted.getStripeCheckoutSessionId());
+        assertNull(persisted.getPaidAt());
+        assertNull(persisted.getStripePaymentIntentId());
+        assertTrue(programAccessRepository.findByPurchaseId(purchase.getId()).isEmpty());
+    }
+
+    @Test
+    void shouldRejectExpirationForUnknownPurchase() throws Exception {
+        String payload = expiredSessionPayload(
+                UUID.randomUUID(), "cs_test_unknown_purchase"
+        );
+
+        postSignedWebhook(payload, signatureFor(payload), 500);
+        assertEquals(0L, purchaseRepository.count());
+        assertEquals(0L, programAccessRepository.count());
+    }
+
     private void postSignedWebhook(String payload, String signature, int expectedStatus)
             throws Exception {
         mockMvc.perform(post("/api/webhooks/stripe")
@@ -290,12 +390,36 @@ class StripePurchaseWebhookIntegrationTest {
         );
     }
 
+    private String expiredSessionPayload(UUID purchaseId, String checkoutSessionId) {
+        return """
+                {
+                  "id": "evt_expired_%s",
+                  "object": "event",
+                  "api_version": "%s",
+                  "created": 1791547200,
+                  "livemode": false,
+                  "pending_webhooks": 1,
+                  "type": "checkout.session.expired",
+                  "data": {
+                    "object": {
+                      "id": "%s",
+                      "object": "checkout.session",
+                      "client_reference_id": "%s",
+                      "mode": "payment",
+                      "status": "expired",
+                      "payment_status": "unpaid"
+                    }
+                  }
+                }
+                """.formatted(checkoutSessionId, Stripe.API_VERSION, checkoutSessionId, purchaseId);
+    }
+
     private String completedSessionPayload(
             UUID purchaseId, String checkoutSessionId, String paymentIntentId
     ) {
         return """
                 {
-                  "id": "evt_test_completed_123",
+                  "id": "evt_completed_%s",
                   "object": "event",
                   "api_version": "%s",
                   "created": 1791547200,
@@ -314,6 +438,7 @@ class StripePurchaseWebhookIntegrationTest {
                   }
                 }
                 """.formatted(
+                paymentIntentId,
                 Stripe.API_VERSION,
                 checkoutSessionId,
                 purchaseId,
