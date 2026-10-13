@@ -11,10 +11,18 @@ public class StripeWebhookController {
     private final StripeWebhookService
             stripeWebhookService;
 
+    private final StripeWebhookEventHandler
+            stripeWebhookEventHandler;
+
     public StripeWebhookController(
-            StripeWebhookService stripeWebhookService
+            StripeWebhookService stripeWebhookService,
+            StripeWebhookEventHandler stripeWebhookEventHandler
     ) {
-        this.stripeWebhookService = stripeWebhookService;
+        this.stripeWebhookService =
+                stripeWebhookService;
+
+        this.stripeWebhookEventHandler =
+                stripeWebhookEventHandler;
     }
 
     @PostMapping
@@ -28,6 +36,10 @@ public class StripeWebhookController {
                         payload,
                         signatureHeader
                 );
+
+        stripeWebhookEventHandler.handle(
+                event
+        );
 
         return ResponseEntity.ok().build();
     }

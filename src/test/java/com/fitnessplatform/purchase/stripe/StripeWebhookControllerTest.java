@@ -20,18 +20,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class StripeWebhookControllerTest {
 
     private static final String PAYLOAD = """
-            {
-              "id": "evt_test_123",
-              "object": "event",
-              "type": "checkout.session.completed",
-              "data": {
-                "object": {
-                  "id": "cs_test_123",
-                  "object": "checkout.session"
-                }
-              }
+        {
+          "id": "evt_test_123",
+          "object": "event",
+          "type": "customer.created",
+          "data": {
+            "object": {
+              "id": "cus_test_123",
+              "object": "customer"
             }
-            """;
+          }
+        }
+        """;
 
     @Autowired
     private MockMvc mockMvc;

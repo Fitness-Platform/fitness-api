@@ -59,6 +59,13 @@ public class Purchase {
     private String stripeCheckoutSessionId;
 
     @Column(
+            name = "stripe_payment_intent_id",
+            unique = true,
+            length = 255
+    )
+    private String stripePaymentIntentId;
+
+    @Column(
             name = "created_at",
             nullable = false,
             updatable = false
@@ -139,11 +146,35 @@ public class Purchase {
         return stripeCheckoutSessionId;
     }
 
+    public String getStripePaymentIntentId() {
+        return stripePaymentIntentId;
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
     }
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public void markPaid(
+            Instant paidAt,
+            String stripePaymentIntentId
+    ) {
+        if (status != PurchaseStatus.PENDING) {
+            throw new IllegalStateException(
+                    "Only pending purchases can be marked as paid"
+            );
+        }
+
+        this.status =
+                PurchaseStatus.PAID;
+
+        this.paidAt =
+                paidAt;
+
+        this.stripePaymentIntentId =
+                stripePaymentIntentId;
     }
 }

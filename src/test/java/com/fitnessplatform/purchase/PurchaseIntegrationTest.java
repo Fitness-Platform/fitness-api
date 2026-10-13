@@ -16,6 +16,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.Instant;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
@@ -165,6 +167,118 @@ class PurchaseIntegrationTest {
         assertEquals(
                 "cs_test_example",
                 persisted.getStripeCheckoutSessionId()
+        );
+    }
+
+    @Test
+    void shouldMarkPendingPurchaseAsPaid() {
+
+        User user =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program"
+                );
+
+        Purchase purchase =
+                new Purchase(
+                        user,
+                        program,
+                        8900L,
+                        "USD"
+                );
+
+        purchase.attachStripeCheckoutSession(
+                "cs_test_paid"
+        );
+
+        purchase =
+                purchaseRepository.saveAndFlush(
+                        purchase
+                );
+
+        Instant paidAt =
+                Instant.parse(
+                        "2026-10-09T12:00:00Z"
+                );
+
+        purchase.markPaid(
+                paidAt,
+                "pi_test_123"
+        );
+
+        purchaseRepository.saveAndFlush(
+                purchase
+        );
+
+        Purchase persisted =
+                purchaseRepository
+                        .findById(
+                                purchase.getId()
+                        )
+                        .orElseThrow();
+
+        assertEquals(
+                PurchaseStatus.PAID,
+                persisted.getStatus()
+        );
+
+        assertEquals(
+                paidAt,
+                persisted.getPaidAt()
+        );
+
+        assertEquals(
+                "pi_test_123",
+                persisted.getStripePaymentIntentId()
+        );
+
+        assertEquals(
+                "cs_test_paid",
+                persisted.getStripeCheckoutSessionId()
+        );
+    }
+
+    @Test
+    void shouldRejectMarkingNonPendingPurchaseAsPaid() {
+
+        User user =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program"
+                );
+
+        Purchase purchase =
+                new Purchase(
+                        user,
+                        program,
+                        8900L,
+                        "USD"
+                );
+
+        purchase.markPaid(
+                Instant.parse(
+                        "2026-10-09T12:00:00Z"
+                ),
+                "pi_test_123"
+        );
+
+        assertThrows(
+                IllegalStateException.class,
+                () ->
+                        purchase.markPaid(
+                                Instant.parse(
+                                        "2026-10-09T13:00:00Z"
+                                ),
+                                "pi_test_456"
+                        )
         );
     }
 
