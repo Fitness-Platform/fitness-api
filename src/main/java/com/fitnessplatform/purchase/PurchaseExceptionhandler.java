@@ -93,4 +93,32 @@ public class PurchaseExceptionhandler {
 
         return problem;
     }
+
+    @ExceptionHandler(MemberPurchaseNotFoundException.class)
+    ProblemDetail handleMemberPurchaseNotFound(
+            MemberPurchaseNotFoundException exception
+    ) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.NOT_FOUND,
+                "Purchase not found"
+        );
+
+        problem.setTitle("Purchase not found");
+
+        return problem;
+    }
+
+    @ExceptionHandler(AdminPurchaseNotFoundException.class)
+    ProblemDetail handleAdminPurchaseNotFound(
+            AdminPurchaseNotFoundException exception
+    ) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.NOT_FOUND,
+                "Purchase not found"
+        );
+
+        problem.setTitle("Purchase not found");
+
+        return problem;
+    }
 }
