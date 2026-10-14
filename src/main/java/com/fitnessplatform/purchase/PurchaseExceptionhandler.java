@@ -8,8 +8,14 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 @RestControllerAdvice
 public class PurchaseExceptionhandler {
+
+    private static final Logger log =
+            LoggerFactory.getLogger(PurchaseExceptionhandler.class);
 
     @ExceptionHandler(
             ProgramNotPurchasableException.class
@@ -68,6 +74,8 @@ public class PurchaseExceptionhandler {
     ProblemDetail handlePurchasePaymentConfirmation(
             PurchasePaymentConfirmationException exception
     ) {
+        log.error("Failed to confirm purchase payment", exception);
+
         ProblemDetail problem =
                 ProblemDetail.forStatusAndDetail(
                         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -83,6 +91,9 @@ public class PurchaseExceptionhandler {
     ProblemDetail handleStripeWebhookProcessing(
             StripeWebhookProcessingException exception
     ) {
+
+        log.error("Failed to process Stripe webhook", exception);
+
         ProblemDetail problem =
                 ProblemDetail.forStatusAndDetail(
                         HttpStatus.INTERNAL_SERVER_ERROR,
