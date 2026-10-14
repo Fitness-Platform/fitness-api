@@ -64,6 +64,49 @@ The complete purchase flow was successfully validated on October 14, 2026.
 - Access duration validated as six calendar months.
 - Exactly one ProgramAccess was associated with the confirmed Purchase.
 
+## Regression and Resilience Validation
+
+The successful Stripe Test Mode validation covered the complete
+purchase flow, including Checkout Session creation, payment
+confirmation, webhook delivery, Purchase persistence, and
+ProgramAccess granting.
+
+Additional security, resilience, and business rules are covered
+by the existing automated test suite.
+
+### Automated Test Coverage
+
+The automated tests verify that:
+
+- Duplicate webhook delivery does not create duplicate ProgramAccess
+  records.
+- Expired Checkout Sessions do not grant program access.
+- Checkout Sessions with `payment_status=unpaid` do not confirm
+  Purchases or grant access.
+- Invalid Stripe webhook signatures are rejected.
+- Purchase ownership and member isolation are enforced.
+- Regular users cannot access administrative Purchase APIs.
+- Concurrent payment confirmations do not create duplicate access.
+- Payment confirmation and expiration conflicts preserve financial
+  consistency.
+- Transaction failures roll back Purchase updates and prevent
+  partial access granting.
+- Progressive program unlocking remains functional.
+- Workout delivery and exercise load customization remain functional.
+
+The full Maven regression suite completed successfully.
+
+### Validation Scope
+
+The successful payment flow was validated manually using Stripe
+Test Mode and Stripe CLI.
+
+The additional scenarios listed above were validated through
+automated tests, not through separate real Stripe Test Mode
+payments.
+
+No production transactions were executed.
+
 ## Known Issue — API Version Compatibility
 
 During the initial validation, a Stripe event using API version
@@ -100,3 +143,14 @@ This validation used Stripe Test Mode.
 
 It does not validate production payments, production webhook delivery,
 refunds, or deployment infrastructure.
+
+### Checkout Cancellation
+
+Manual cancellation through the Stripe Hosted Checkout was not
+separately validated during this task.
+
+Checkout Session expiration and the prevention of unauthorized
+program access are covered by the automated test suite.
+
+User cancellation and Stripe Checkout Session expiration are
+distinct behaviors and should not be treated as equivalent.
