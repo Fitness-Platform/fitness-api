@@ -159,7 +159,6 @@ class StripePurchaseWebhookIntegrationTest {
                 jwtService.generateToken(buyer.getId())
         );
 
-        // The buyer cannot see the program before payment confirmation.
         mockMvc.perform(get("/api/me/programs").cookie(memberCookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
@@ -181,7 +180,6 @@ class StripePurchaseWebhookIntegrationTest {
         assertEquals(buyer.getId(), access.getUser().getId());
         assertEquals(program.getId(), access.getProgram().getId());
 
-        // The member's own authenticated listing now includes the purchase.
         mockMvc.perform(get("/api/me/programs").cookie(memberCookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
@@ -193,7 +191,6 @@ class StripePurchaseWebhookIntegrationTest {
                 .andExpect(jsonPath("$[0].accessExpiresAt")
                         .value("2027-04-09T12:00:00Z"));
 
-        // Progressive unlock follows the purchased access start date.
         mockMvc.perform(get("/api/me/programs/{programId}", program.getId())
                         .cookie(memberCookie))
                 .andExpect(status().isOk())
@@ -369,6 +366,68 @@ class StripePurchaseWebhookIntegrationTest {
 
         postSignedWebhook(payload, signatureFor(payload), 500);
         assertEquals(0L, purchaseRepository.count());
+        assertEquals(0L, programAccessRepository.count());
+    }
+
+    @Test
+    void shouldNotConfirmPurchaseWhenCheckoutSessionIsUnpaid()
+            throws Exception {
+
+        Purchase purchase = createPendingPurchase("cs_test_unpaid_123");
+
+        String payload = """
+            {
+              "id": "evt_unpaid_checkout_123",
+              "object": "event",
+              "api_version": "%s",
+              "created": 1791547200,
+              "livemode": false,
+              "pending_webhooks": 1,
+              "type": "checkout.session.completed",
+              "data": {
+                "object": {
+                  "id": "cs_test_unpaid_123",
+                  "object": "checkout.session",
+                  "client_reference_id": "%s",
+                  "mode": "payment",
+                  "payment_status": "unpaid"
+                }
+              }
+            }
+            """.formatted(
+                Stripe.API_VERSION,
+                purchase.getId()
+        );
+
+        postSignedWebhook(
+                payload,
+                signatureFor(payload),
+                200
+        );
+
+        Purchase persisted = purchaseRepository
+                .findById(purchase.getId())
+                .orElseThrow();
+
+        assertEquals(
+                PurchaseStatus.PENDING,
+                persisted.getStatus()
+        );
+
+        assertNull(persisted.getPaidAt());
+        assertNull(persisted.getStripePaymentIntentId());
+
+        assertEquals(
+                "cs_test_unpaid_123",
+                persisted.getStripeCheckoutSessionId()
+        );
+
+        assertTrue(
+                programAccessRepository
+                        .findByPurchaseId(purchase.getId())
+                        .isEmpty()
+        );
+
         assertEquals(0L, programAccessRepository.count());
     }
 
