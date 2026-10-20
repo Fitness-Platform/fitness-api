@@ -1,9 +1,11 @@
 package com.fitnessplatform.program;
 
+import com.fitnessplatform.access.ProgramAccessWorkoutSet;
 import com.fitnessplatform.exercise.Exercise;
 import com.fitnessplatform.workout.WorkoutExercise;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 public record MemberWorkoutExerciseResponse(
@@ -19,12 +21,14 @@ public record MemberWorkoutExerciseResponse(
         BigDecimal currentWeightLb,
         Integer restSeconds,
         String notes,
-        Integer position
+        Integer position,
+        List<MemberWorkoutSetResponse> completedSets
 ) {
 
     public static MemberWorkoutExerciseResponse from(
             WorkoutExercise workoutExercise,
-            BigDecimal currentWeightLb
+            BigDecimal currentWeightLb,
+            List<ProgramAccessWorkoutSet> completedSets
     ) {
         Exercise exercise =
                 workoutExercise.getExercise();
@@ -42,7 +46,12 @@ public record MemberWorkoutExerciseResponse(
                 currentWeightLb,
                 workoutExercise.getRestSeconds(),
                 workoutExercise.getNotes(),
-                workoutExercise.getPosition()
+                workoutExercise.getPosition(),
+                completedSets.stream()
+                        .map(
+                                MemberWorkoutSetResponse::from
+                        )
+                        .toList()
         );
     }
 }

@@ -1,10 +1,7 @@
 package com.fitnessplatform.program;
 
 import com.fitnessplatform.TestcontainersConfiguration;
-import com.fitnessplatform.access.ProgramAccess;
-import com.fitnessplatform.access.ProgramAccessExerciseLoad;
-import com.fitnessplatform.access.ProgramAccessExerciseLoadRepository;
-import com.fitnessplatform.access.ProgramAccessRepository;
+import com.fitnessplatform.access.*;
 import com.fitnessplatform.auth.JwtService;
 import com.fitnessplatform.auth.passwordreset.PasswordResetTokenRepository;
 import com.fitnessplatform.exercise.Exercise;
@@ -35,11 +32,11 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import org.springframework.http.MediaType;
 
+import static org.hamcrest.Matchers.nullValue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -76,6 +73,14 @@ class MemberProgramControllerTest {
     @Autowired
     private PasswordResetTokenRepository
             passwordResetTokenRepository;
+
+    @Autowired
+    private ProgramAccessWorkoutRepository
+            programAccessWorkoutRepository;
+
+    @Autowired
+    private ProgramAccessWorkoutSetRepository
+            programAccessWorkoutSetRepository;
 
     @Autowired
     private PasswordEncoder
@@ -115,6 +120,9 @@ class MemberProgramControllerTest {
 
     @BeforeEach
     void cleanDatabase() {
+        programAccessWorkoutSetRepository.deleteAll();
+        programAccessWorkoutRepository.deleteAll();
+
         programAccessExerciseLoadRepository.deleteAll();
 
         programWeekWorkoutRepository.deleteAll();
@@ -4468,6 +4476,2319 @@ class MemberProgramControllerTest {
                 .andExpect(
                         jsonPath("$.length()")
                                 .value(0)
+                );
+    }
+
+    @Test
+    void shouldSaveMemberWorkoutSet()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek week =
+                createWeek(
+                        program,
+                        "Week 1",
+                        1
+                );
+
+        Workout workout =
+                createWorkout(
+                        "Full Body Strength",
+                        null
+                );
+
+        ProgramWeekWorkout association =
+                addWorkoutToWeek(
+                        week,
+                        workout,
+                        1
+                );
+
+        Exercise exercise =
+                createExercise(
+                        "Goblet Squat",
+                        null,
+                        "Dumbbell",
+                        null
+                );
+
+        WorkoutExercise workoutExercise =
+                addExerciseToWorkout(
+                        workout,
+                        exercise,
+                        3,
+                        "10",
+                        new BigDecimal("35.00"),
+                        90,
+                        null,
+                        1
+                );
+
+        ProgramAccess access =
+                createAccess(
+                        member,
+                        program,
+                        Instant.parse(
+                                "2026-09-01T12:00:00Z"
+                        ),
+                        null
+                );
+
+        mockMvc.perform(
+                        put(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}"
+                                        + "/exercises/{workoutExerciseId}"
+                                        + "/sets/{setNumber}",
+                                program.getId(),
+                                week.getId(),
+                                association.getId(),
+                                workoutExercise.getId(),
+                                1
+                        )
+                                .with(csrf())
+                                .cookie(
+                                        authenticatedCookie(member)
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "reps": 10,
+                                          "weightLb": 35.00
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        jsonPath("$.id")
+                                .isNotEmpty()
+                )
+                .andExpect(
+                        jsonPath("$.workoutExerciseId")
+                                .value(
+                                        workoutExercise
+                                                .getId()
+                                                .toString()
+                                )
+                )
+                .andExpect(
+                        jsonPath("$.setNumber")
+                                .value(1)
+                )
+                .andExpect(
+                        jsonPath("$.reps")
+                                .value(10)
+                )
+                .andExpect(
+                        jsonPath("$.weightLb")
+                                .value(35.00)
+                )
+                .andExpect(
+                        jsonPath("$.completedAt")
+                                .isNotEmpty()
+                );
+
+        assertEquals(
+                1,
+                programAccessWorkoutRepository.count()
+        );
+
+        assertEquals(
+                1,
+                programAccessWorkoutSetRepository.count()
+        );
+
+        ProgramAccessWorkout accessWorkout =
+                programAccessWorkoutRepository
+                        .findByProgramAccessIdAndProgramWeekWorkoutId(
+                                access.getId(),
+                                association.getId()
+                        )
+                        .orElseThrow();
+
+        ProgramAccessWorkoutSet savedSet =
+                programAccessWorkoutSetRepository
+                        .findByProgramAccessWorkoutIdAndWorkoutExerciseIdAndSetNumber(
+                                accessWorkout.getId(),
+                                workoutExercise.getId(),
+                                1
+                        )
+                        .orElseThrow();
+
+        assertEquals(
+                10,
+                savedSet.getReps()
+        );
+
+        assertEquals(
+                new BigDecimal("35.00"),
+                savedSet.getWeightLb()
+        );
+    }
+
+    @Test
+    void shouldUpdateExistingWorkoutSetWithoutDuplicating()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek week =
+                createWeek(
+                        program,
+                        "Week 1",
+                        1
+                );
+
+        Workout workout =
+                createWorkout(
+                        "Full Body Strength",
+                        null
+                );
+
+        ProgramWeekWorkout association =
+                addWorkoutToWeek(
+                        week,
+                        workout,
+                        1
+                );
+
+        Exercise exercise =
+                createExercise(
+                        "Goblet Squat",
+                        null,
+                        "Dumbbell",
+                        null
+                );
+
+        WorkoutExercise workoutExercise =
+                addExerciseToWorkout(
+                        workout,
+                        exercise,
+                        3,
+                        "10",
+                        new BigDecimal("35.00"),
+                        90,
+                        null,
+                        1
+                );
+
+        ProgramAccess access =
+                createAccess(
+                        member,
+                        program,
+                        Instant.parse(
+                                "2026-09-01T12:00:00Z"
+                        ),
+                        null
+                );
+
+        Cookie cookie =
+                authenticatedCookie(member);
+
+        String path =
+                "/api/me/programs/{programId}"
+                        + "/weeks/{weekId}"
+                        + "/workouts/{associationId}"
+                        + "/exercises/{workoutExerciseId}"
+                        + "/sets/{setNumber}";
+
+        mockMvc.perform(
+                        put(
+                                path,
+                                program.getId(),
+                                week.getId(),
+                                association.getId(),
+                                workoutExercise.getId(),
+                                1
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "reps": 10,
+                                          "weightLb": 35.00
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                );
+
+        mockMvc.perform(
+                        put(
+                                path,
+                                program.getId(),
+                                week.getId(),
+                                association.getId(),
+                                workoutExercise.getId(),
+                                1
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "reps": 8,
+                                          "weightLb": 37.50
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        jsonPath("$.setNumber")
+                                .value(1)
+                )
+                .andExpect(
+                        jsonPath("$.reps")
+                                .value(8)
+                )
+                .andExpect(
+                        jsonPath("$.weightLb")
+                                .value(37.50)
+                );
+
+        assertEquals(
+                1,
+                programAccessWorkoutRepository.count()
+        );
+
+        assertEquals(
+                1,
+                programAccessWorkoutSetRepository.count()
+        );
+
+        ProgramAccessWorkout accessWorkout =
+                programAccessWorkoutRepository
+                        .findByProgramAccessIdAndProgramWeekWorkoutId(
+                                access.getId(),
+                                association.getId()
+                        )
+                        .orElseThrow();
+
+        ProgramAccessWorkoutSet savedSet =
+                programAccessWorkoutSetRepository
+                        .findByProgramAccessWorkoutIdAndWorkoutExerciseIdAndSetNumber(
+                                accessWorkout.getId(),
+                                workoutExercise.getId(),
+                                1
+                        )
+                        .orElseThrow();
+
+        assertEquals(
+                8,
+                savedSet.getReps()
+        );
+
+        assertEquals(
+                new BigDecimal("37.50"),
+                savedSet.getWeightLb()
+        );
+    }
+
+    @Test
+    void shouldRejectWorkoutSetNumberAbovePrescribedSets()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek week =
+                createWeek(
+                        program,
+                        "Week 1",
+                        1
+                );
+
+        Workout workout =
+                createWorkout(
+                        "Full Body Strength",
+                        null
+                );
+
+        ProgramWeekWorkout association =
+                addWorkoutToWeek(
+                        week,
+                        workout,
+                        1
+                );
+
+        Exercise exercise =
+                createExercise(
+                        "Goblet Squat",
+                        null,
+                        "Dumbbell",
+                        null
+                );
+
+        WorkoutExercise workoutExercise =
+                addExerciseToWorkout(
+                        workout,
+                        exercise,
+                        3,
+                        "10",
+                        new BigDecimal("35.00"),
+                        90,
+                        null,
+                        1
+                );
+
+        createAccess(
+                member,
+                program,
+                Instant.parse(
+                        "2026-09-01T12:00:00Z"
+                ),
+                null
+        );
+
+        mockMvc.perform(
+                        put(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}"
+                                        + "/exercises/{workoutExerciseId}"
+                                        + "/sets/{setNumber}",
+                                program.getId(),
+                                week.getId(),
+                                association.getId(),
+                                workoutExercise.getId(),
+                                4
+                        )
+                                .with(csrf())
+                                .cookie(
+                                        authenticatedCookie(member)
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "reps": 10,
+                                          "weightLb": 35.00
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isBadRequest()
+                )
+                .andExpect(
+                        jsonPath("$.title")
+                                .value(
+                                        "Invalid workout set"
+                                )
+                );
+
+        assertEquals(
+                0,
+                programAccessWorkoutRepository.count()
+        );
+
+        assertEquals(
+                0,
+                programAccessWorkoutSetRepository.count()
+        );
+    }
+
+    @Test
+    void shouldRejectWorkoutSetWithNegativeReps()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek week =
+                createWeek(
+                        program,
+                        "Week 1",
+                        1
+                );
+
+        Workout workout =
+                createWorkout(
+                        "Full Body Strength",
+                        null
+                );
+
+        ProgramWeekWorkout association =
+                addWorkoutToWeek(
+                        week,
+                        workout,
+                        1
+                );
+
+        Exercise exercise =
+                createExercise(
+                        "Goblet Squat",
+                        null,
+                        "Dumbbell",
+                        null
+                );
+
+        WorkoutExercise workoutExercise =
+                addExerciseToWorkout(
+                        workout,
+                        exercise,
+                        3,
+                        "10",
+                        new BigDecimal("35.00"),
+                        90,
+                        null,
+                        1
+                );
+
+        createAccess(
+                member,
+                program,
+                Instant.parse(
+                        "2026-09-01T12:00:00Z"
+                ),
+                null
+        );
+
+        mockMvc.perform(
+                        put(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}"
+                                        + "/exercises/{workoutExerciseId}"
+                                        + "/sets/{setNumber}",
+                                program.getId(),
+                                week.getId(),
+                                association.getId(),
+                                workoutExercise.getId(),
+                                1
+                        )
+                                .with(csrf())
+                                .cookie(
+                                        authenticatedCookie(member)
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "reps": -1,
+                                          "weightLb": 35.00
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isBadRequest()
+                );
+
+        assertEquals(
+                0,
+                programAccessWorkoutRepository.count()
+        );
+
+        assertEquals(
+                0,
+                programAccessWorkoutSetRepository.count()
+        );
+    }
+
+    @Test
+    void shouldRejectWorkoutSetWithNegativeWeight()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek week =
+                createWeek(
+                        program,
+                        "Week 1",
+                        1
+                );
+
+        Workout workout =
+                createWorkout(
+                        "Full Body Strength",
+                        null
+                );
+
+        ProgramWeekWorkout association =
+                addWorkoutToWeek(
+                        week,
+                        workout,
+                        1
+                );
+
+        Exercise exercise =
+                createExercise(
+                        "Goblet Squat",
+                        null,
+                        "Dumbbell",
+                        null
+                );
+
+        WorkoutExercise workoutExercise =
+                addExerciseToWorkout(
+                        workout,
+                        exercise,
+                        3,
+                        "10",
+                        new BigDecimal("35.00"),
+                        90,
+                        null,
+                        1
+                );
+
+        createAccess(
+                member,
+                program,
+                Instant.parse(
+                        "2026-09-01T12:00:00Z"
+                ),
+                null
+        );
+
+        mockMvc.perform(
+                        put(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}"
+                                        + "/exercises/{workoutExerciseId}"
+                                        + "/sets/{setNumber}",
+                                program.getId(),
+                                week.getId(),
+                                association.getId(),
+                                workoutExercise.getId(),
+                                1
+                        )
+                                .with(csrf())
+                                .cookie(
+                                        authenticatedCookie(member)
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "reps": 10,
+                                          "weightLb": -5.00
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isBadRequest()
+                );
+
+        assertEquals(
+                0,
+                programAccessWorkoutRepository.count()
+        );
+
+        assertEquals(
+                0,
+                programAccessWorkoutSetRepository.count()
+        );
+    }
+
+    @Test
+    void shouldRejectWorkoutSetFromLockedWeek()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek weekTwo =
+                createWeek(
+                        program,
+                        "Week 2",
+                        2
+                );
+
+        Workout workout =
+                createWorkout(
+                        "Full Body Strength",
+                        null
+                );
+
+        ProgramWeekWorkout association =
+                addWorkoutToWeek(
+                        weekTwo,
+                        workout,
+                        1
+                );
+
+        Exercise exercise =
+                createExercise(
+                        "Goblet Squat",
+                        null,
+                        "Dumbbell",
+                        null
+                );
+
+        WorkoutExercise workoutExercise =
+                addExerciseToWorkout(
+                        workout,
+                        exercise,
+                        3,
+                        "10",
+                        new BigDecimal("35.00"),
+                        90,
+                        null,
+                        1
+                );
+
+        createAccess(
+                member,
+                program,
+                Instant.parse(
+                        "2026-10-01T12:00:00Z"
+                ),
+                null
+        );
+
+        mockMvc.perform(
+                        put(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}"
+                                        + "/exercises/{workoutExerciseId}"
+                                        + "/sets/{setNumber}",
+                                program.getId(),
+                                weekTwo.getId(),
+                                association.getId(),
+                                workoutExercise.getId(),
+                                1
+                        )
+                                .with(csrf())
+                                .cookie(
+                                        authenticatedCookie(member)
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "reps": 10,
+                                          "weightLb": 35.00
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isForbidden()
+                )
+                .andExpect(
+                        jsonPath("$.title")
+                                .value(
+                                        "Program week locked"
+                                )
+                );
+
+        assertEquals(
+                0,
+                programAccessWorkoutRepository.count()
+        );
+
+        assertEquals(
+                0,
+                programAccessWorkoutSetRepository.count()
+        );
+    }
+
+    @Test
+    void shouldRejectAnotherMemberFromSavingWorkoutSet()
+            throws Exception {
+
+        User owner =
+                createUser(
+                        "owner@example.com"
+                );
+
+        User otherMember =
+                createUser(
+                        "other@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek week =
+                createWeek(
+                        program,
+                        "Week 1",
+                        1
+                );
+
+        Workout workout =
+                createWorkout(
+                        "Full Body Strength",
+                        null
+                );
+
+        ProgramWeekWorkout association =
+                addWorkoutToWeek(
+                        week,
+                        workout,
+                        1
+                );
+
+        Exercise exercise =
+                createExercise(
+                        "Goblet Squat",
+                        null,
+                        "Dumbbell",
+                        null
+                );
+
+        WorkoutExercise workoutExercise =
+                addExerciseToWorkout(
+                        workout,
+                        exercise,
+                        3,
+                        "10",
+                        new BigDecimal("35.00"),
+                        90,
+                        null,
+                        1
+                );
+
+        createAccess(
+                owner,
+                program,
+                Instant.parse(
+                        "2026-09-01T12:00:00Z"
+                ),
+                null
+        );
+
+        mockMvc.perform(
+                        put(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}"
+                                        + "/exercises/{workoutExerciseId}"
+                                        + "/sets/{setNumber}",
+                                program.getId(),
+                                week.getId(),
+                                association.getId(),
+                                workoutExercise.getId(),
+                                1
+                        )
+                                .with(csrf())
+                                .cookie(
+                                        authenticatedCookie(
+                                                otherMember
+                                        )
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "reps": 10,
+                                          "weightLb": 35.00
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isForbidden()
+                )
+                .andExpect(
+                        jsonPath("$.title")
+                                .value(
+                                        "Program access denied"
+                                )
+                );
+
+        assertEquals(
+                0,
+                programAccessWorkoutRepository.count()
+        );
+
+        assertEquals(
+                0,
+                programAccessWorkoutSetRepository.count()
+        );
+    }
+
+    @Test
+    void shouldRejectWorkoutSetWithoutCsrf()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek week =
+                createWeek(
+                        program,
+                        "Week 1",
+                        1
+                );
+
+        Workout workout =
+                createWorkout(
+                        "Full Body Strength",
+                        null
+                );
+
+        ProgramWeekWorkout association =
+                addWorkoutToWeek(
+                        week,
+                        workout,
+                        1
+                );
+
+        Exercise exercise =
+                createExercise(
+                        "Goblet Squat",
+                        null,
+                        "Dumbbell",
+                        null
+                );
+
+        WorkoutExercise workoutExercise =
+                addExerciseToWorkout(
+                        workout,
+                        exercise,
+                        3,
+                        "10",
+                        new BigDecimal("35.00"),
+                        90,
+                        null,
+                        1
+                );
+
+        createAccess(
+                member,
+                program,
+                Instant.parse(
+                        "2026-09-01T12:00:00Z"
+                ),
+                null
+        );
+
+        mockMvc.perform(
+                        put(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}"
+                                        + "/exercises/{workoutExerciseId}"
+                                        + "/sets/{setNumber}",
+                                program.getId(),
+                                week.getId(),
+                                association.getId(),
+                                workoutExercise.getId(),
+                                1
+                        )
+                                .cookie(
+                                        authenticatedCookie(member)
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "reps": 10,
+                                          "weightLb": 35.00
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isForbidden()
+                );
+
+        assertEquals(
+                0,
+                programAccessWorkoutRepository.count()
+        );
+
+        assertEquals(
+                0,
+                programAccessWorkoutSetRepository.count()
+        );
+    }
+
+    @Test
+    void shouldCompleteWorkoutWhenAllSetsAreSaved()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek week =
+                createWeek(
+                        program,
+                        "Week 1",
+                        1
+                );
+
+        Workout workout =
+                createWorkout(
+                        "Full Body Strength",
+                        null
+                );
+
+        ProgramWeekWorkout association =
+                addWorkoutToWeek(
+                        week,
+                        workout,
+                        1
+                );
+
+        Exercise exercise =
+                createExercise(
+                        "Goblet Squat",
+                        null,
+                        "Dumbbell",
+                        null
+                );
+
+        WorkoutExercise workoutExercise =
+                addExerciseToWorkout(
+                        workout,
+                        exercise,
+                        2,
+                        "10",
+                        new BigDecimal("35.00"),
+                        90,
+                        null,
+                        1
+                );
+
+        ProgramAccess access =
+                createAccess(
+                        member,
+                        program,
+                        Instant.parse(
+                                "2026-09-01T12:00:00Z"
+                        ),
+                        null
+                );
+
+        Cookie cookie =
+                authenticatedCookie(member);
+
+        String setPath =
+                "/api/me/programs/{programId}"
+                        + "/weeks/{weekId}"
+                        + "/workouts/{associationId}"
+                        + "/exercises/{workoutExerciseId}"
+                        + "/sets/{setNumber}";
+
+        mockMvc.perform(
+                        put(
+                                setPath,
+                                program.getId(),
+                                week.getId(),
+                                association.getId(),
+                                workoutExercise.getId(),
+                                1
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "reps": 10,
+                                          "weightLb": 35.00
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                );
+
+        mockMvc.perform(
+                        put(
+                                setPath,
+                                program.getId(),
+                                week.getId(),
+                                association.getId(),
+                                workoutExercise.getId(),
+                                2
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "reps": 9,
+                                          "weightLb": 35.00
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                );
+
+        mockMvc.perform(
+                        post(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}"
+                                        + "/complete",
+                                program.getId(),
+                                week.getId(),
+                                association.getId()
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                )
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        jsonPath("$.programAccessWorkoutId")
+                                .isNotEmpty()
+                )
+                .andExpect(
+                        jsonPath("$.programWeekWorkoutId")
+                                .value(
+                                        association
+                                                .getId()
+                                                .toString()
+                                )
+                )
+                .andExpect(
+                        jsonPath("$.startedAt")
+                                .isNotEmpty()
+                )
+                .andExpect(
+                        jsonPath("$.completedAt")
+                                .isNotEmpty()
+                );
+
+        ProgramAccessWorkout accessWorkout =
+                programAccessWorkoutRepository
+                        .findByProgramAccessIdAndProgramWeekWorkoutId(
+                                access.getId(),
+                                association.getId()
+                        )
+                        .orElseThrow();
+
+        assertNotNull(
+                accessWorkout.getCompletedAt()
+        );
+
+        assertEquals(
+                2,
+                programAccessWorkoutSetRepository.count()
+        );
+    }
+
+    @Test
+    void shouldRejectWorkoutSetChangesAfterWorkoutCompletion()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek week =
+                createWeek(
+                        program,
+                        "Week 1",
+                        1
+                );
+
+        Workout workout =
+                createWorkout(
+                        "Full Body Strength",
+                        null
+                );
+
+        ProgramWeekWorkout association =
+                addWorkoutToWeek(
+                        week,
+                        workout,
+                        1
+                );
+
+        Exercise exercise =
+                createExercise(
+                        "Goblet Squat",
+                        null,
+                        "Dumbbell",
+                        null
+                );
+
+        WorkoutExercise workoutExercise =
+                addExerciseToWorkout(
+                        workout,
+                        exercise,
+                        1,
+                        "10",
+                        new BigDecimal("35.00"),
+                        90,
+                        null,
+                        1
+                );
+
+        ProgramAccess access =
+                createAccess(
+                        member,
+                        program,
+                        Instant.parse(
+                                "2026-09-01T12:00:00Z"
+                        ),
+                        null
+                );
+
+        Cookie cookie =
+                authenticatedCookie(member);
+
+        String setPath =
+                "/api/me/programs/{programId}"
+                        + "/weeks/{weekId}"
+                        + "/workouts/{associationId}"
+                        + "/exercises/{workoutExerciseId}"
+                        + "/sets/{setNumber}";
+
+        mockMvc.perform(
+                        put(
+                                setPath,
+                                program.getId(),
+                                week.getId(),
+                                association.getId(),
+                                workoutExercise.getId(),
+                                1
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "reps": 10,
+                                          "weightLb": 35.00
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                );
+
+        mockMvc.perform(
+                        post(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}"
+                                        + "/complete",
+                                program.getId(),
+                                week.getId(),
+                                association.getId()
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                )
+                .andExpect(
+                        status().isOk()
+                );
+
+        ProgramAccessWorkout accessWorkout =
+                programAccessWorkoutRepository
+                        .findByProgramAccessIdAndProgramWeekWorkoutId(
+                                access.getId(),
+                                association.getId()
+                        )
+                        .orElseThrow();
+
+        ProgramAccessWorkoutSet savedSet =
+                programAccessWorkoutSetRepository
+                        .findByProgramAccessWorkoutIdAndWorkoutExerciseIdAndSetNumber(
+                                accessWorkout.getId(),
+                                workoutExercise.getId(),
+                                1
+                        )
+                        .orElseThrow();
+
+        assertEquals(
+                10,
+                savedSet.getReps()
+        );
+
+        assertEquals(
+                new BigDecimal("35.00"),
+                savedSet.getWeightLb()
+        );
+
+        mockMvc.perform(
+                        put(
+                                setPath,
+                                program.getId(),
+                                week.getId(),
+                                association.getId(),
+                                workoutExercise.getId(),
+                                1
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "reps": 8,
+                                          "weightLb": 40.00
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isConflict()
+                )
+                .andExpect(
+                        jsonPath("$.title")
+                                .value(
+                                        "Workout already completed"
+                                )
+                )
+                .andExpect(
+                        jsonPath("$.status")
+                                .value(409)
+                );
+
+        ProgramAccessWorkoutSet persistedSet =
+                programAccessWorkoutSetRepository
+                        .findById(
+                                savedSet.getId()
+                        )
+                        .orElseThrow();
+
+        assertEquals(
+                10,
+                persistedSet.getReps()
+        );
+
+        assertEquals(
+                new BigDecimal("35.00"),
+                persistedSet.getWeightLb()
+        );
+
+        assertEquals(
+                1,
+                programAccessWorkoutSetRepository.count()
+        );
+    }
+
+    @Test
+    void shouldRejectWorkoutCompletionWhenSetIsMissing()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek week =
+                createWeek(
+                        program,
+                        "Week 1",
+                        1
+                );
+
+        Workout workout =
+                createWorkout(
+                        "Full Body Strength",
+                        null
+                );
+
+        ProgramWeekWorkout association =
+                addWorkoutToWeek(
+                        week,
+                        workout,
+                        1
+                );
+
+        Exercise exercise =
+                createExercise(
+                        "Goblet Squat",
+                        null,
+                        "Dumbbell",
+                        null
+                );
+
+        WorkoutExercise workoutExercise =
+                addExerciseToWorkout(
+                        workout,
+                        exercise,
+                        2,
+                        "10",
+                        new BigDecimal("35.00"),
+                        90,
+                        null,
+                        1
+                );
+
+        ProgramAccess access =
+                createAccess(
+                        member,
+                        program,
+                        Instant.parse(
+                                "2026-09-01T12:00:00Z"
+                        ),
+                        null
+                );
+
+        Cookie cookie =
+                authenticatedCookie(member);
+
+        mockMvc.perform(
+                        put(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}"
+                                        + "/exercises/{workoutExerciseId}"
+                                        + "/sets/{setNumber}",
+                                program.getId(),
+                                week.getId(),
+                                association.getId(),
+                                workoutExercise.getId(),
+                                1
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "reps": 10,
+                                          "weightLb": 35.00
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                );
+
+        mockMvc.perform(
+                        post(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}"
+                                        + "/complete",
+                                program.getId(),
+                                week.getId(),
+                                association.getId()
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                )
+                .andExpect(
+                        status().isConflict()
+                )
+                .andExpect(
+                        jsonPath("$.title")
+                                .value(
+                                        "Workout is incomplete"
+                                )
+                );
+
+        ProgramAccessWorkout accessWorkout =
+                programAccessWorkoutRepository
+                        .findByProgramAccessIdAndProgramWeekWorkoutId(
+                                access.getId(),
+                                association.getId()
+                        )
+                        .orElseThrow();
+
+        assertNull(
+                accessWorkout.getCompletedAt()
+        );
+
+        assertEquals(
+                1,
+                programAccessWorkoutSetRepository.count()
+        );
+    }
+
+    @Test
+    void shouldKeepWorkoutCompletionIdempotent()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek week =
+                createWeek(
+                        program,
+                        "Week 1",
+                        1
+                );
+
+        Workout workout =
+                createWorkout(
+                        "Full Body Strength",
+                        null
+                );
+
+        ProgramWeekWorkout association =
+                addWorkoutToWeek(
+                        week,
+                        workout,
+                        1
+                );
+
+        Exercise exercise =
+                createExercise(
+                        "Goblet Squat",
+                        null,
+                        "Dumbbell",
+                        null
+                );
+
+        WorkoutExercise workoutExercise =
+                addExerciseToWorkout(
+                        workout,
+                        exercise,
+                        1,
+                        "10",
+                        new BigDecimal("35.00"),
+                        90,
+                        null,
+                        1
+                );
+
+        ProgramAccess access =
+                createAccess(
+                        member,
+                        program,
+                        Instant.parse(
+                                "2026-09-01T12:00:00Z"
+                        ),
+                        null
+                );
+
+        Cookie cookie =
+                authenticatedCookie(member);
+
+        mockMvc.perform(
+                        put(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}"
+                                        + "/exercises/{workoutExerciseId}"
+                                        + "/sets/{setNumber}",
+                                program.getId(),
+                                week.getId(),
+                                association.getId(),
+                                workoutExercise.getId(),
+                                1
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "reps": 10,
+                                          "weightLb": 35.00
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                );
+
+        String completePath =
+                "/api/me/programs/{programId}"
+                        + "/weeks/{weekId}"
+                        + "/workouts/{associationId}"
+                        + "/complete";
+
+        mockMvc.perform(
+                        post(
+                                completePath,
+                                program.getId(),
+                                week.getId(),
+                                association.getId()
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                )
+                .andExpect(
+                        status().isOk()
+                );
+
+        ProgramAccessWorkout firstResult =
+                programAccessWorkoutRepository
+                        .findByProgramAccessIdAndProgramWeekWorkoutId(
+                                access.getId(),
+                                association.getId()
+                        )
+                        .orElseThrow();
+
+        Instant firstCompletedAt =
+                firstResult.getCompletedAt();
+
+        assertNotNull(
+                firstCompletedAt
+        );
+
+        mockMvc.perform(
+                        post(
+                                completePath,
+                                program.getId(),
+                                week.getId(),
+                                association.getId()
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                )
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        jsonPath("$.completedAt")
+                                .value(
+                                        firstCompletedAt.toString()
+                                )
+                );
+
+        ProgramAccessWorkout secondResult =
+                programAccessWorkoutRepository
+                        .findByProgramAccessIdAndProgramWeekWorkoutId(
+                                access.getId(),
+                                association.getId()
+                        )
+                        .orElseThrow();
+
+        assertEquals(
+                firstCompletedAt,
+                secondResult.getCompletedAt()
+        );
+
+        assertEquals(
+                1,
+                programAccessWorkoutRepository.count()
+        );
+
+        assertEquals(
+                1,
+                programAccessWorkoutSetRepository.count()
+        );
+    }
+
+    @Test
+    void shouldRejectWorkoutCompletionWithoutCsrf()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek week =
+                createWeek(
+                        program,
+                        "Week 1",
+                        1
+                );
+
+        Workout workout =
+                createWorkout(
+                        "Full Body Strength",
+                        null
+                );
+
+        ProgramWeekWorkout association =
+                addWorkoutToWeek(
+                        week,
+                        workout,
+                        1
+                );
+
+        Exercise exercise =
+                createExercise(
+                        "Goblet Squat",
+                        null,
+                        "Dumbbell",
+                        null
+                );
+
+        WorkoutExercise workoutExercise =
+                addExerciseToWorkout(
+                        workout,
+                        exercise,
+                        1,
+                        "10",
+                        new BigDecimal("35.00"),
+                        90,
+                        null,
+                        1
+                );
+
+        ProgramAccess access =
+                createAccess(
+                        member,
+                        program,
+                        Instant.parse(
+                                "2026-09-01T12:00:00Z"
+                        ),
+                        null
+                );
+
+        Cookie cookie =
+                authenticatedCookie(member);
+
+        mockMvc.perform(
+                        put(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}"
+                                        + "/exercises/{workoutExerciseId}"
+                                        + "/sets/{setNumber}",
+                                program.getId(),
+                                week.getId(),
+                                association.getId(),
+                                workoutExercise.getId(),
+                                1
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "reps": 10,
+                                          "weightLb": 35.00
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                );
+
+        mockMvc.perform(
+                        post(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}"
+                                        + "/complete",
+                                program.getId(),
+                                week.getId(),
+                                association.getId()
+                        )
+                                .cookie(cookie)
+                )
+                .andExpect(
+                        status().isForbidden()
+                );
+
+        ProgramAccessWorkout accessWorkout =
+                programAccessWorkoutRepository
+                        .findByProgramAccessIdAndProgramWeekWorkoutId(
+                                access.getId(),
+                                association.getId()
+                        )
+                        .orElseThrow();
+
+        assertNull(
+                accessWorkout.getCompletedAt()
+        );
+    }
+
+    @Test
+    void shouldReturnNotStartedTrackingStateForUntouchedWorkout()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek week =
+                createWeek(
+                        program,
+                        "Week 1",
+                        1
+                );
+
+        Workout workout =
+                createWorkout(
+                        "Full Body Strength",
+                        null
+                );
+
+        ProgramWeekWorkout association =
+                addWorkoutToWeek(
+                        week,
+                        workout,
+                        1
+                );
+
+        Exercise exercise =
+                createExercise(
+                        "Goblet Squat",
+                        null,
+                        "Dumbbell",
+                        null
+                );
+
+        addExerciseToWorkout(
+                workout,
+                exercise,
+                3,
+                "10",
+                new BigDecimal("35.00"),
+                90,
+                null,
+                1
+        );
+
+        createAccess(
+                member,
+                program,
+                Instant.parse(
+                        "2026-09-01T12:00:00Z"
+                ),
+                null
+        );
+
+        mockMvc.perform(
+                        get(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}",
+                                program.getId(),
+                                week.getId(),
+                                association.getId()
+                        )
+                                .cookie(
+                                        authenticatedCookie(member)
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        jsonPath("$.startedAt")
+                                .value(nullValue())
+                )
+                .andExpect(
+                        jsonPath("$.completedAt")
+                                .value(nullValue())
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].completedSets.length()"
+                        )
+                                .value(0)
+                );
+
+        assertEquals(
+                0,
+                programAccessWorkoutRepository.count()
+        );
+
+        assertEquals(
+                0,
+                programAccessWorkoutSetRepository.count()
+        );
+    }
+
+    @Test
+    void shouldReturnSavedWorkoutSetsWhenReopeningWorkout()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek week =
+                createWeek(
+                        program,
+                        "Week 1",
+                        1
+                );
+
+        Workout workout =
+                createWorkout(
+                        "Full Body Strength",
+                        null
+                );
+
+        ProgramWeekWorkout association =
+                addWorkoutToWeek(
+                        week,
+                        workout,
+                        1
+                );
+
+        Exercise exercise =
+                createExercise(
+                        "Goblet Squat",
+                        null,
+                        "Dumbbell",
+                        null
+                );
+
+        WorkoutExercise workoutExercise =
+                addExerciseToWorkout(
+                        workout,
+                        exercise,
+                        3,
+                        "10",
+                        new BigDecimal("35.00"),
+                        90,
+                        null,
+                        1
+                );
+
+        createAccess(
+                member,
+                program,
+                Instant.parse(
+                        "2026-09-01T12:00:00Z"
+                ),
+                null
+        );
+
+        Cookie cookie =
+                authenticatedCookie(member);
+
+        String setPath =
+                "/api/me/programs/{programId}"
+                        + "/weeks/{weekId}"
+                        + "/workouts/{associationId}"
+                        + "/exercises/{workoutExerciseId}"
+                        + "/sets/{setNumber}";
+
+        mockMvc.perform(
+                        put(
+                                setPath,
+                                program.getId(),
+                                week.getId(),
+                                association.getId(),
+                                workoutExercise.getId(),
+                                1
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "reps": 10,
+                                          "weightLb": 35.00
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                );
+
+        mockMvc.perform(
+                        put(
+                                setPath,
+                                program.getId(),
+                                week.getId(),
+                                association.getId(),
+                                workoutExercise.getId(),
+                                2
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "reps": 8,
+                                          "weightLb": 37.50
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                );
+
+        mockMvc.perform(
+                        get(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}",
+                                program.getId(),
+                                week.getId(),
+                                association.getId()
+                        )
+                                .cookie(cookie)
+                )
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        jsonPath("$.startedAt")
+                                .isNotEmpty()
+                )
+                .andExpect(
+                        jsonPath("$.completedAt")
+                                .value(nullValue())
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].completedSets.length()"
+                        )
+                                .value(2)
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].completedSets[0].setNumber"
+                        )
+                                .value(1)
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].completedSets[0].reps"
+                        )
+                                .value(10)
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].completedSets[0].weightLb"
+                        )
+                                .value(35.00)
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].completedSets[1].setNumber"
+                        )
+                                .value(2)
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].completedSets[1].reps"
+                        )
+                                .value(8)
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].completedSets[1].weightLb"
+                        )
+                                .value(37.50)
+                );
+    }
+
+    @Test
+    void shouldReturnCompletedTrackingStateAfterWorkoutCompletion()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek week =
+                createWeek(
+                        program,
+                        "Week 1",
+                        1
+                );
+
+        Workout workout =
+                createWorkout(
+                        "Full Body Strength",
+                        null
+                );
+
+        ProgramWeekWorkout association =
+                addWorkoutToWeek(
+                        week,
+                        workout,
+                        1
+                );
+
+        Exercise exercise =
+                createExercise(
+                        "Goblet Squat",
+                        null,
+                        "Dumbbell",
+                        null
+                );
+
+        WorkoutExercise workoutExercise =
+                addExerciseToWorkout(
+                        workout,
+                        exercise,
+                        1,
+                        "10",
+                        new BigDecimal("35.00"),
+                        90,
+                        null,
+                        1
+                );
+
+        createAccess(
+                member,
+                program,
+                Instant.parse(
+                        "2026-09-01T12:00:00Z"
+                ),
+                null
+        );
+
+        Cookie cookie =
+                authenticatedCookie(member);
+
+        mockMvc.perform(
+                        put(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}"
+                                        + "/exercises/{workoutExerciseId}"
+                                        + "/sets/{setNumber}",
+                                program.getId(),
+                                week.getId(),
+                                association.getId(),
+                                workoutExercise.getId(),
+                                1
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "reps": 10,
+                                          "weightLb": 35.00
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                );
+
+        mockMvc.perform(
+                        post(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}"
+                                        + "/complete",
+                                program.getId(),
+                                week.getId(),
+                                association.getId()
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                )
+                .andExpect(
+                        status().isOk()
+                );
+
+        mockMvc.perform(
+                        get(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}",
+                                program.getId(),
+                                week.getId(),
+                                association.getId()
+                        )
+                                .cookie(cookie)
+                )
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        jsonPath("$.startedAt")
+                                .isNotEmpty()
+                )
+                .andExpect(
+                        jsonPath("$.completedAt")
+                                .isNotEmpty()
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].completedSets.length()"
+                        )
+                                .value(1)
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].completedSets[0].setNumber"
+                        )
+                                .value(1)
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].completedSets[0].reps"
+                        )
+                                .value(10)
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].completedSets[0].weightLb"
+                        )
+                                .value(35.00)
                 );
     }
 

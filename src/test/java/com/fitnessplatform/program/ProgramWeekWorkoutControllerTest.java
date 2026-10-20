@@ -19,6 +19,19 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
+import com.fitnessplatform.access.ProgramAccess;
+import com.fitnessplatform.access.ProgramAccessRepository;
+import com.fitnessplatform.access.ProgramAccessWorkout;
+import com.fitnessplatform.access.ProgramAccessWorkoutRepository;
+import com.fitnessplatform.access.ProgramAccessWorkoutSet;
+import com.fitnessplatform.access.ProgramAccessWorkoutSetRepository;
+import com.fitnessplatform.access.ProgramAccessWorkoutTrackingService;
+import com.fitnessplatform.exercise.Exercise;
+import com.fitnessplatform.exercise.ExerciseRepository;
+import com.fitnessplatform.workout.WorkoutExercise;
+
+import java.math.BigDecimal;
+import java.time.Instant;
 
 import java.util.UUID;
 
@@ -67,14 +80,38 @@ class ProgramWeekWorkoutControllerTest {
     @Autowired
     private JwtService jwtService;
 
+    @Autowired
+    private ProgramAccessRepository programAccessRepository;
+
+    @Autowired
+    private ProgramAccessWorkoutRepository
+            programAccessWorkoutRepository;
+
+    @Autowired
+    private ProgramAccessWorkoutSetRepository
+            programAccessWorkoutSetRepository;
+
+    @Autowired
+    private ProgramAccessWorkoutTrackingService
+            programAccessWorkoutTrackingService;
+
+    @Autowired
+    private ExerciseRepository exerciseRepository;
+
     @BeforeEach
     void cleanDatabase() {
+        programAccessWorkoutSetRepository.deleteAll();
+        programAccessWorkoutRepository.deleteAll();
+        programAccessRepository.deleteAll();
+
         programWeekWorkoutRepository.deleteAll();
         programWeekRepository.deleteAll();
         programRepository.deleteAll();
 
         workoutExerciseRepository.deleteAll();
         workoutRepository.deleteAll();
+
+        exerciseRepository.deleteAll();
 
         passwordResetTokenRepository.deleteAll();
         userRepository.deleteAll();
@@ -886,6 +923,125 @@ class ProgramWeekWorkoutControllerTest {
         assertFalse(
                 programWeekWorkoutRepository.existsById(
                         fixture.association().getId()
+                )
+        );
+    }
+
+    @Test
+    void shouldRejectDeletingProgramWeekWorkoutWithTrackingHistory()
+            throws Exception {
+
+        ProgramWeekWorkoutFixture fixture =
+                createFixture();
+
+        User member =
+                userRepository.saveAndFlush(
+                        new User(
+                                "member@example.com",
+                                passwordEncoder.encode(
+                                        "StrongPassword123!"
+                                ),
+                                UserRole.USER
+                        )
+                );
+
+        ProgramAccess access =
+                programAccessRepository.saveAndFlush(
+                        new ProgramAccess(
+                                member,
+                                fixture.program(),
+                                Instant.parse(
+                                        "2026-09-01T12:00:00Z"
+                                ),
+                                null
+                        )
+                );
+
+        Exercise exercise =
+                exerciseRepository.saveAndFlush(
+                        new Exercise(
+                                "Bench Press",
+                                null,
+                                "Dumbbell",
+                                null
+                        )
+                );
+
+        WorkoutExercise workoutExercise =
+                workoutExerciseRepository.saveAndFlush(
+                        new WorkoutExercise(
+                                fixture.workout(),
+                                exercise,
+                                1,
+                                "10",
+                                new BigDecimal("35.00"),
+                                90,
+                                null,
+                                1
+                        )
+                );
+
+        ProgramAccessWorkoutSet savedSet =
+                programAccessWorkoutTrackingService
+                        .saveSet(
+                                access,
+                                fixture.association(),
+                                workoutExercise,
+                                1,
+                                10,
+                                new BigDecimal("35.00")
+                        );
+
+        ProgramAccessWorkout accessWorkout =
+                programAccessWorkoutRepository
+                        .findByProgramAccessIdAndProgramWeekWorkoutId(
+                                access.getId(),
+                                fixture.association().getId()
+                        )
+                        .orElseThrow();
+
+        Cookie adminCookie =
+                authenticatedCookie(
+                        UserRole.ADMIN
+                );
+
+        mockMvc.perform(
+                        delete(
+                                "/api/admin/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}",
+                                fixture.program().getId(),
+                                fixture.week().getId(),
+                                fixture.association().getId()
+                        )
+                                .with(csrf())
+                                .cookie(adminCookie)
+                )
+                .andExpect(
+                        status().isConflict()
+                )
+                .andExpect(
+                        jsonPath("$.title")
+                                .value(
+                                        "Program week workout is in use"
+                                )
+                );
+
+        assertTrue(
+                programWeekWorkoutRepository.existsById(
+                        fixture.association().getId()
+                )
+        );
+
+        assertTrue(
+                programAccessWorkoutRepository.existsById(
+                        accessWorkout.getId()
+                )
+        );
+
+        assertTrue(
+                programAccessWorkoutSetRepository.existsById(
+                        savedSet.getId()
                 )
         );
     }
