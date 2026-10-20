@@ -150,4 +150,23 @@ public class ProgramExceptionHandler {
 
         return problem;
     }
+
+    @ExceptionHandler(
+            ProgramWeekInUseException.class
+    )
+    ProblemDetail handleProgramWeekInUse(
+            ProgramWeekInUseException exception
+    ) {
+        ProblemDetail problem =
+                ProblemDetail.forStatusAndDetail(
+                        HttpStatus.CONFLICT,
+                        exception.getMessage()
+                );
+
+        problem.setTitle(
+                "Program week is in use"
+        );
+
+        return problem;
+    }
 }

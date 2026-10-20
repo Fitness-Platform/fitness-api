@@ -37,6 +37,9 @@ public class MemberProgramService {
     private final ProgramAccessExerciseLoadService
             programAccessExerciseLoadService;
 
+    private final ProgramAccessWorkoutTrackingService
+            programAccessWorkoutTrackingService;
+
     public MemberProgramService(
             ProgramAccessAuthorizationService
                     programAccessAuthorizationService,
@@ -50,9 +53,10 @@ public class MemberProgramService {
                     workoutExerciseRepository,
             ProgramWeekUnlockService
                     programWeekUnlockService,
-
             ProgramAccessExerciseLoadService
-                    programAccessExerciseLoadService
+                    programAccessExerciseLoadService,
+            ProgramAccessWorkoutTrackingService
+                    programAccessWorkoutTrackingService
     ) {
         this.programAccessAuthorizationService =
                 programAccessAuthorizationService;
@@ -74,6 +78,9 @@ public class MemberProgramService {
 
         this.programAccessExerciseLoadService =
                 programAccessExerciseLoadService;
+
+        this.programAccessWorkoutTrackingService =
+                programAccessWorkoutTrackingService;
     }
 
     @Transactional(readOnly = true)
@@ -255,10 +262,18 @@ public class MemberProgramService {
                                 exercises
                         );
 
+        ProgramAccessWorkoutTrackingState trackingState =
+                programAccessWorkoutTrackingService
+                        .getTrackingState(
+                                access,
+                                association
+                        );
+
         return MemberProgramWorkoutDetailResponse.from(
                 association,
                 exercises,
-                currentWeights
+                currentWeights,
+                trackingState
         );
     }
 
@@ -335,6 +350,152 @@ public class MemberProgramService {
         return MemberExerciseLoadResponse.from(
                 workoutExercise,
                 load.getWeightLb()
+        );
+    }
+
+    @Transactional
+    public MemberWorkoutSetResponse saveMyWorkoutSet(
+            UUID userId,
+            UUID programId,
+            UUID programWeekId,
+            UUID programWeekWorkoutId,
+            UUID workoutExerciseId,
+            Integer setNumber,
+            Integer reps,
+            BigDecimal weightLb
+    ) {
+        ProgramAccess access =
+                requirePublishedProgramAccess(
+                        userId,
+                        programId
+                );
+
+        ProgramWeek week =
+                programWeekRepository
+                        .findByIdAndProgramId(
+                                programWeekId,
+                                programId
+                        )
+                        .orElseThrow(
+                                () ->
+                                        new ProgramWeekNotFoundException(
+                                                programWeekId
+                                        )
+                        );
+
+        programWeekUnlockService
+                .requireUnlocked(
+                        access,
+                        week
+                );
+
+        ProgramWeekWorkout association =
+                programWeekWorkoutRepository
+                        .findByIdAndProgramWeekId(
+                                programWeekWorkoutId,
+                                programWeekId
+                        )
+                        .orElseThrow(
+                                () ->
+                                        new ProgramWeekWorkoutNotFoundException(
+                                                programWeekWorkoutId
+                                        )
+                        );
+
+        WorkoutExercise workoutExercise =
+                workoutExerciseRepository
+                        .findByIdAndWorkoutId(
+                                workoutExerciseId,
+                                association
+                                        .getWorkout()
+                                        .getId()
+                        )
+                        .orElseThrow(
+                                () ->
+                                        new WorkoutExerciseNotFoundException(
+                                                workoutExerciseId
+                                        )
+                        );
+
+        ProgramAccessWorkoutSet savedSet =
+                programAccessWorkoutTrackingService
+                        .saveSet(
+                                access,
+                                association,
+                                workoutExercise,
+                                setNumber,
+                                reps,
+                                weightLb
+                        );
+
+        return MemberWorkoutSetResponse.from(
+                savedSet
+        );
+    }
+
+    @Transactional
+    public MemberWorkoutCompletionResponse completeMyWorkout(
+            UUID userId,
+            UUID programId,
+            UUID programWeekId,
+            UUID programWeekWorkoutId
+    ) {
+        ProgramAccess access =
+                requirePublishedProgramAccess(
+                        userId,
+                        programId
+                );
+
+        ProgramWeek week =
+                programWeekRepository
+                        .findByIdAndProgramId(
+                                programWeekId,
+                                programId
+                        )
+                        .orElseThrow(
+                                () ->
+                                        new ProgramWeekNotFoundException(
+                                                programWeekId
+                                        )
+                        );
+
+        programWeekUnlockService
+                .requireUnlocked(
+                        access,
+                        week
+                );
+
+        ProgramWeekWorkout association =
+                programWeekWorkoutRepository
+                        .findByIdAndProgramWeekId(
+                                programWeekWorkoutId,
+                                programWeekId
+                        )
+                        .orElseThrow(
+                                () ->
+                                        new ProgramWeekWorkoutNotFoundException(
+                                                programWeekWorkoutId
+                                        )
+                        );
+
+        List<WorkoutExercise> workoutExercises =
+                workoutExerciseRepository
+                        .findAllByWorkoutIdOrderByPositionAsc(
+                                association
+                                        .getWorkout()
+                                        .getId()
+                        );
+
+        ProgramAccessWorkout completedWorkout =
+                programAccessWorkoutTrackingService
+                        .completeWorkout(
+                                access,
+                                association,
+                                workoutExercises
+                        );
+
+        return MemberWorkoutCompletionResponse.from(
+                completedWorkout
         );
     }
 

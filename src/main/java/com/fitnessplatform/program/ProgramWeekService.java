@@ -1,5 +1,6 @@
 package com.fitnessplatform.program;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -111,7 +112,19 @@ public class ProgramWeekService {
                 programWeekId
         );
 
-        programWeekRepository.delete(programWeek);
+        try {
+            programWeekRepository.delete(
+                    programWeek
+            );
+
+            programWeekRepository.flush();
+        } catch (
+                DataIntegrityViolationException exception
+        ) {
+            throw new ProgramWeekInUseException(
+                    programWeekId
+            );
+        }
     }
 
     private Program findProgram(

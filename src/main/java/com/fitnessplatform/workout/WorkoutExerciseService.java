@@ -3,6 +3,7 @@ package com.fitnessplatform.workout;
 import com.fitnessplatform.exercise.Exercise;
 import com.fitnessplatform.exercise.ExerciseNotFoundException;
 import com.fitnessplatform.exercise.ExerciseRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -155,9 +156,19 @@ public class WorkoutExerciseService {
                                         )
                         );
 
-        workoutExerciseRepository.delete(
-                workoutExercise
-        );
+        try {
+            workoutExerciseRepository.delete(
+                    workoutExercise
+            );
+
+            workoutExerciseRepository.flush();
+        } catch (
+                DataIntegrityViolationException exception
+        ) {
+            throw new WorkoutExerciseInUseException(
+                    workoutExerciseId
+            );
+        }
     }
 
     private Workout findWorkout(

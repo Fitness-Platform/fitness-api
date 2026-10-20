@@ -1,6 +1,8 @@
 package com.fitnessplatform.access;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -79,5 +81,16 @@ public interface ProgramAccessRepository extends JpaRepository<ProgramAccess, UU
 
     Optional<ProgramAccess> findByPurchaseId(
             UUID purchaseId
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+    SELECT access
+    FROM ProgramAccess access
+    WHERE access.id = :accessId
+    """)
+    Optional<ProgramAccess> findByIdForUpdate(
+            @Param("accessId")
+            UUID accessId
     );
 }

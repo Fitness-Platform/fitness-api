@@ -116,4 +116,59 @@ public class MemberProgramController {
                         request.weightLb()
                 );
     }
+
+    @PutMapping(
+            "/{programId}/weeks/{programWeekId}"
+                    + "/workouts/{programWeekWorkoutId}"
+                    + "/exercises/{workoutExerciseId}"
+                    + "/sets/{setNumber}"
+    )
+    public MemberWorkoutSetResponse saveMyWorkoutSet(
+            @PathVariable UUID programId,
+            @PathVariable UUID programWeekId,
+            @PathVariable UUID programWeekWorkoutId,
+            @PathVariable UUID workoutExerciseId,
+            @PathVariable Integer setNumber,
+            @Valid @RequestBody
+            MemberWorkoutSetRequest request,
+            Authentication authentication
+    ) {
+        UUID userId =
+                (UUID) authentication.getPrincipal();
+
+        return memberProgramService
+                .saveMyWorkoutSet(
+                        userId,
+                        programId,
+                        programWeekId,
+                        programWeekWorkoutId,
+                        workoutExerciseId,
+                        setNumber,
+                        request.reps(),
+                        request.weightLb()
+                );
+    }
+
+    @PostMapping(
+            "/{programId}/weeks/{programWeekId}"
+                    + "/workouts/{programWeekWorkoutId}"
+                    + "/complete"
+    )
+    public MemberWorkoutCompletionResponse completeMyWorkout(
+            @PathVariable UUID programId,
+            @PathVariable UUID programWeekId,
+            @PathVariable UUID programWeekWorkoutId,
+            Authentication authentication
+    ) {
+        UUID userId =
+                (UUID) authentication.getPrincipal();
+
+        return memberProgramService
+                .completeMyWorkout(
+                        userId,
+                        programId,
+                        programWeekId,
+                        programWeekWorkoutId
+                );
+    }
 }
