@@ -6792,6 +6792,275 @@ class MemberProgramControllerTest {
                 );
     }
 
+    @Test
+    void shouldReturnPreviousPerformanceFromPreviousProgramAccess()
+            throws Exception {
+
+        User member =
+                createUser(
+                        "member@example.com"
+                );
+
+        Program program =
+                createProgram(
+                        "Strength Program",
+                        null
+                );
+
+        ProgramWeek week =
+                createWeek(
+                        program,
+                        "Week 1",
+                        1
+                );
+
+        Workout workout =
+                createWorkout(
+                        "Full Body",
+                        null
+                );
+
+        ProgramWeekWorkout association =
+                addWorkoutToWeek(
+                        week,
+                        workout,
+                        1
+                );
+
+        Exercise exercise =
+                createExercise(
+                        "Goblet Squat",
+                        "Keep your chest tall.",
+                        "Dumbbell",
+                        null
+                );
+
+        WorkoutExercise workoutExercise =
+                addExerciseToWorkout(
+                        workout,
+                        exercise,
+                        3,
+                        "8-10",
+                        new BigDecimal("35.00"),
+                        60,
+                        null,
+                        1
+                );
+
+        ProgramAccess previousAccess =
+                createAccess(
+                        member,
+                        program,
+                        Instant.parse(
+                                "2026-09-01T12:00:00Z"
+                        ),
+                        null
+                );
+
+        Cookie cookie =
+                authenticatedCookie(
+                        member
+                );
+
+        mockMvc.perform(
+                        put(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}"
+                                        + "/exercises/{workoutExerciseId}"
+                                        + "/sets/{setNumber}",
+                                program.getId(),
+                                week.getId(),
+                                association.getId(),
+                                workoutExercise.getId(),
+                                1
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "reps": 10,
+                                          "weightLb": 35.00
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                );
+
+        mockMvc.perform(
+                        put(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}"
+                                        + "/exercises/{workoutExerciseId}"
+                                        + "/sets/{setNumber}",
+                                program.getId(),
+                                week.getId(),
+                                association.getId(),
+                                workoutExercise.getId(),
+                                2
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "reps": 10,
+                                          "weightLb": 35.00
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                );
+
+        mockMvc.perform(
+                        put(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}"
+                                        + "/exercises/{workoutExerciseId}"
+                                        + "/sets/{setNumber}",
+                                program.getId(),
+                                week.getId(),
+                                association.getId(),
+                                workoutExercise.getId(),
+                                3
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "reps": 8,
+                                          "weightLb": 35.00
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                );
+
+        mockMvc.perform(
+                        post(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}"
+                                        + "/complete",
+                                program.getId(),
+                                week.getId(),
+                                association.getId()
+                        )
+                                .with(csrf())
+                                .cookie(cookie)
+                )
+                .andExpect(
+                        status().isOk()
+                );
+
+        previousAccess.revoke(
+                Instant.parse(
+                        "2026-09-15T12:00:00Z"
+                )
+        );
+
+        programAccessRepository.saveAndFlush(
+                previousAccess
+        );
+
+        createAccess(
+                member,
+                program,
+                Instant.parse(
+                        "2026-09-20T12:00:00Z"
+                ),
+                null
+        );
+
+        mockMvc.perform(
+                        get(
+                                "/api/me/programs/{programId}"
+                                        + "/weeks/{weekId}"
+                                        + "/workouts/{associationId}",
+                                program.getId(),
+                                week.getId(),
+                                association.getId()
+                        )
+                                .cookie(cookie)
+                )
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].completedSets.length()"
+                        )
+                                .value(0)
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].previousSets.length()"
+                        )
+                                .value(3)
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].previousSets[0].setNumber"
+                        )
+                                .value(1)
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].previousSets[0].reps"
+                        )
+                                .value(10)
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].previousSets[0].weightLb"
+                        )
+                                .value(35.00)
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].previousSets[1].setNumber"
+                        )
+                                .value(2)
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].previousSets[1].reps"
+                        )
+                                .value(10)
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].previousSets[2].setNumber"
+                        )
+                                .value(3)
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.exercises[0].previousSets[2].reps"
+                        )
+                                .value(8)
+                );
+    }
+
     private Exercise createExercise(
             String name,
             String instructions,

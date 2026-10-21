@@ -1,5 +1,6 @@
 package com.fitnessplatform.program;
 
+import com.fitnessplatform.access.ProgramAccessWorkoutSet;
 import com.fitnessplatform.access.ProgramAccessWorkoutTrackingState;
 import com.fitnessplatform.workout.Workout;
 import com.fitnessplatform.workout.WorkoutExercise;
@@ -25,7 +26,9 @@ public record MemberProgramWorkoutDetailResponse(
             ProgramWeekWorkout association,
             List<WorkoutExercise> exercises,
             Map<UUID, BigDecimal> currentWeights,
-            ProgramAccessWorkoutTrackingState trackingState
+            ProgramAccessWorkoutTrackingState trackingState,
+            Map<UUID, List<ProgramAccessWorkoutSet>>
+                    previousPerformance
     ) {
         Workout workout =
                 association.getWorkout();
@@ -51,6 +54,10 @@ public record MemberProgramWorkoutDetailResponse(
                                                         trackingState.setsFor(
                                                                 workoutExercise
                                                                         .getId()
+                                                        ),
+                                                        previousPerformance.getOrDefault(
+                                                                workoutExercise.getId(),
+                                                                List.of()
                                                         )
                                                 )
                         )
