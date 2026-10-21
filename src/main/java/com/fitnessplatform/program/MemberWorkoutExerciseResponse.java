@@ -22,13 +22,28 @@ public record MemberWorkoutExerciseResponse(
         Integer restSeconds,
         String notes,
         Integer position,
-        List<MemberWorkoutSetResponse> completedSets
+        List<MemberWorkoutSetResponse> completedSets,
+        List<MemberWorkoutPreviousSetResponse> previousSets
 ) {
 
     public static MemberWorkoutExerciseResponse from(
             WorkoutExercise workoutExercise,
             BigDecimal currentWeightLb,
             List<ProgramAccessWorkoutSet> completedSets
+    ) {
+        return from(
+                workoutExercise,
+                currentWeightLb,
+                completedSets,
+                List.of()
+        );
+    }
+
+    public static MemberWorkoutExerciseResponse from(
+            WorkoutExercise workoutExercise,
+            BigDecimal currentWeightLb,
+            List<ProgramAccessWorkoutSet> completedSets,
+            List<ProgramAccessWorkoutSet> previousSets
     ) {
         Exercise exercise =
                 workoutExercise.getExercise();
@@ -50,6 +65,11 @@ public record MemberWorkoutExerciseResponse(
                 completedSets.stream()
                         .map(
                                 MemberWorkoutSetResponse::from
+                        )
+                        .toList(),
+                previousSets.stream()
+                        .map(
+                                MemberWorkoutPreviousSetResponse::from
                         )
                         .toList()
         );

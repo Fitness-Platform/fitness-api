@@ -25,4 +25,10 @@ public interface ProgramAccessWorkoutRepository
     findAllByProgramAccessIdOrderByStartedAtDesc(
             UUID programAccessId
     );
+
+    Optional<ProgramAccessWorkout>
+    findByProgramAccessIdAndProgramWeekWorkoutIdAndCompletedAtIsNotNull(
+            UUID programAccessId,
+            UUID programWeekWorkoutId
+    );
 }

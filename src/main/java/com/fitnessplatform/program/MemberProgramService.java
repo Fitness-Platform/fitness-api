@@ -6,6 +6,8 @@ import com.fitnessplatform.workout.WorkoutExerciseNotFoundException;
 import com.fitnessplatform.workout.WorkoutExerciseRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.fitnessplatform.access.ProgramAccessWorkoutHistoryService;
+import com.fitnessplatform.access.ProgramAccessWorkoutSet;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -40,6 +42,9 @@ public class MemberProgramService {
     private final ProgramAccessWorkoutTrackingService
             programAccessWorkoutTrackingService;
 
+    private final ProgramAccessWorkoutHistoryService
+            programAccessWorkoutHistoryService;
+
     public MemberProgramService(
             ProgramAccessAuthorizationService
                     programAccessAuthorizationService,
@@ -56,7 +61,9 @@ public class MemberProgramService {
             ProgramAccessExerciseLoadService
                     programAccessExerciseLoadService,
             ProgramAccessWorkoutTrackingService
-                    programAccessWorkoutTrackingService
+                    programAccessWorkoutTrackingService,
+            ProgramAccessWorkoutHistoryService
+                    programAccessWorkoutHistoryService
     ) {
         this.programAccessAuthorizationService =
                 programAccessAuthorizationService;
@@ -81,6 +88,9 @@ public class MemberProgramService {
 
         this.programAccessWorkoutTrackingService =
                 programAccessWorkoutTrackingService;
+
+        this.programAccessWorkoutHistoryService =
+                programAccessWorkoutHistoryService;
     }
 
     @Transactional(readOnly = true)
@@ -269,11 +279,20 @@ public class MemberProgramService {
                                 association
                         );
 
+        Map<UUID, List<ProgramAccessWorkoutSet>>
+                previousPerformance =
+                programAccessWorkoutHistoryService
+                        .findPreviousPerformance(
+                                access,
+                                association
+                        );
+
         return MemberProgramWorkoutDetailResponse.from(
                 association,
                 exercises,
                 currentWeights,
-                trackingState
+                trackingState,
+                previousPerformance
         );
     }
 

@@ -93,4 +93,37 @@ public interface ProgramAccessRepository extends JpaRepository<ProgramAccess, UU
             @Param("accessId")
             UUID accessId
     );
+
+    @Query("""
+    SELECT access
+    FROM ProgramAccess access
+    WHERE access.user.id = :userId
+      AND access.program.id = :programId
+      AND access.id <> :currentAccessId
+      AND (
+            access.startsAt < :currentStartsAt
+            OR (
+                access.startsAt = :currentStartsAt
+                AND access.createdAt < :currentCreatedAt
+            )
+      )
+    ORDER BY access.startsAt DESC,
+             access.createdAt DESC
+    """)
+    List<ProgramAccess> findPreviousAccesses(
+            @Param("userId")
+            UUID userId,
+
+            @Param("programId")
+            UUID programId,
+
+            @Param("currentAccessId")
+            UUID currentAccessId,
+
+            @Param("currentStartsAt")
+            Instant currentStartsAt,
+
+            @Param("currentCreatedAt")
+            Instant currentCreatedAt
+    );
 }
