@@ -11,7 +11,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -86,5 +89,45 @@ class UserRepositoryIntegrationTest {
                 DataIntegrityViolationException.class,
                 () -> userRepository.saveAndFlush(secondUser)
         );
+    }
+    @Test
+    void shouldOrderUsersByNewestThenIdForEqualTimestamps() {
+        User older = saveUserAt("older@example.com", "2026-01-01T00:00:00Z");
+        User first = saveUserAt("first@example.com", "2026-02-01T00:00:00Z");
+        User second = saveUserAt("second@example.com", "2026-02-01T00:00:00Z");
+        List<User> ordered = userRepository.findAllByOrderByCreatedAtDescIdAsc();
+
+        assertEquals(older.getId(), ordered.get(2).getId());
+        assertEquals(
+                List.of(first.getId().toString(), second.getId().toString()).stream().sorted().toList(),
+                ordered.subList(0, 2).stream().map(user -> user.getId().toString()).toList()
+        );
+    }
+
+    @Test
+    void shouldSearchCaseInsensitivelyInDeterministicOrder() {
+        User older = saveUserAt("First@Example.com", "2026-01-01T00:00:00Z");
+        User newer = saveUserAt("second@example.COM", "2026-02-01T00:00:00Z");
+        saveUserAt("other@elsewhere.test", "2026-03-01T00:00:00Z");
+
+        assertEquals(List.of(newer.getId(), older.getId()),
+                userRepository.findByEmailContainingIgnoreCaseOrderByCreatedAtDescIdAsc("EXAMPLE")
+                        .stream().map(User::getId).toList());
+    }
+
+    @Test
+    void shouldTreatSearchWildcardsAsLiteralCharacters() {
+        User literal = saveUserAt("literal%_@example.com", "2026-01-01T00:00:00Z");
+        saveUserAt("other@example.com", "2026-02-01T00:00:00Z");
+
+        assertEquals(List.of(literal.getId()),
+                userRepository.findByEmailContainingIgnoreCaseOrderByCreatedAtDescIdAsc("%_")
+                        .stream().map(User::getId).toList());
+    }
+
+    private User saveUserAt(String email, String createdAt) {
+        User user = new User(email, "encoded-password", UserRole.USER);
+        ReflectionTestUtils.setField(user, "createdAt", Instant.parse(createdAt));
+        return userRepository.saveAndFlush(user);
     }
 }
