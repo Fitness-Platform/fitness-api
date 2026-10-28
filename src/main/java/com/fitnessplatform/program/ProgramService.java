@@ -43,6 +43,19 @@ public class ProgramService {
                 );
     }
 
+    @Transactional(readOnly = true)
+    public List<Program> findPublished() {
+        return programRepository.findByStatusOrderByCreatedAtDescIdAsc(
+                ProgramStatus.PUBLISHED
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public Program findPublishedById(UUID programId) {
+        return programRepository.findByIdAndStatus(programId, ProgramStatus.PUBLISHED)
+                .orElseThrow(() -> new ProgramNotFoundException(programId));
+    }
+
     @Transactional
     public Program update(
             UUID programId,
