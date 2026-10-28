@@ -372,4 +372,44 @@ class ProgramServiceTest {
                 result.getCurrency()
         );
     }
+
+    @Test
+    void shouldListOnlyPublishedProgramsUsingDeterministicRepositoryQuery() {
+        Program published = new Program("Published", "Description");
+        published.publish();
+        when(programRepository.findByStatusOrderByCreatedAtDescIdAsc(ProgramStatus.PUBLISHED))
+                .thenReturn(List.of(published));
+
+        assertEquals(List.of(published), programService.findPublished());
+        verify(programRepository).findByStatusOrderByCreatedAtDescIdAsc(ProgramStatus.PUBLISHED);
+        verifyNoMoreInteractions(programRepository);
+    }
+
+    @Test
+    void shouldFindPublishedProgramById() {
+        UUID id = UUID.randomUUID();
+        Program program = new Program("Published", "Description");
+        program.publish();
+        when(programRepository.findByIdAndStatus(id, ProgramStatus.PUBLISHED))
+                .thenReturn(Optional.of(program));
+
+        assertSame(program, programService.findPublishedById(id));
+        verify(programRepository).findByIdAndStatus(id, ProgramStatus.PUBLISHED);
+        verifyNoMoreInteractions(programRepository);
+    }
+
+    @Test
+    void shouldHideUnpublishedOrMissingProgramsUsingExistingNotFoundConvention() {
+        UUID id = UUID.randomUUID();
+        when(programRepository.findByIdAndStatus(id, ProgramStatus.PUBLISHED))
+                .thenReturn(Optional.empty());
+
+        ProgramNotFoundException exception = assertThrows(
+                ProgramNotFoundException.class, () -> programService.findPublishedById(id)
+        );
+
+        assertEquals("Program not found with: " + id, exception.getMessage());
+        verify(programRepository).findByIdAndStatus(id, ProgramStatus.PUBLISHED);
+        verifyNoMoreInteractions(programRepository);
+    }
 }
