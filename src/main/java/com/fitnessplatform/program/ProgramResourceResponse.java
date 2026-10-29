@@ -11,7 +11,8 @@ public record ProgramResourceResponse(
         String url,
         Integer position,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        com.fitnessplatform.media.MediaMetadataResponse uploadedMedia
 ) {
     public static ProgramResourceResponse from(
             ProgramResource resource
@@ -24,7 +25,8 @@ public record ProgramResourceResponse(
                 resource.getUrl(),
                 resource.getPosition(),
                 resource.getCreatedAt(),
-                resource.getUpdatedAt()
+                resource.getUpdatedAt(),
+                com.fitnessplatform.media.MediaMetadataResponse.from(resource.getMedia())
         );
     }
 }

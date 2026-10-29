@@ -30,6 +30,15 @@ public record MemberProgramWorkoutDetailResponse(
             Map<UUID, List<ProgramAccessWorkoutSet>>
                     previousPerformance
     ) {
+        return from(association, exercises, currentWeights, trackingState, previousPerformance,
+                exercise -> exercise.getExercise().getVideoUrl());
+    }
+
+    public static MemberProgramWorkoutDetailResponse from(ProgramWeekWorkout association,
+            List<WorkoutExercise> exercises, Map<UUID, BigDecimal> currentWeights,
+            ProgramAccessWorkoutTrackingState trackingState,
+            Map<UUID, List<ProgramAccessWorkoutSet>> previousPerformance,
+            java.util.function.Function<WorkoutExercise, String> urlResolver) {
         Workout workout =
                 association.getWorkout();
 
@@ -58,7 +67,8 @@ public record MemberProgramWorkoutDetailResponse(
                                                         previousPerformance.getOrDefault(
                                                                 workoutExercise.getId(),
                                                                 List.of()
-                                                        )
+                                                        ),
+                                                        urlResolver.apply(workoutExercise)
                                                 )
                         )
                         .toList()

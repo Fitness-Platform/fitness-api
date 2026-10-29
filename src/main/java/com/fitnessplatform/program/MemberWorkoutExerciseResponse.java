@@ -45,6 +45,12 @@ public record MemberWorkoutExerciseResponse(
             List<ProgramAccessWorkoutSet> completedSets,
             List<ProgramAccessWorkoutSet> previousSets
     ) {
+        return from(workoutExercise, currentWeightLb, completedSets, previousSets,
+                workoutExercise.getExercise().getVideoUrl());
+    }
+
+    public static MemberWorkoutExerciseResponse from(WorkoutExercise workoutExercise, BigDecimal currentWeightLb,
+            List<ProgramAccessWorkoutSet> completedSets, List<ProgramAccessWorkoutSet> previousSets, String videoUrl) {
         Exercise exercise =
                 workoutExercise.getExercise();
 
@@ -54,7 +60,7 @@ public record MemberWorkoutExerciseResponse(
                 exercise.getName(),
                 exercise.getInstructions(),
                 exercise.getEquipment(),
-                exercise.getVideoUrl(),
+                videoUrl,
                 workoutExercise.getSets(),
                 workoutExercise.getReps(),
                 workoutExercise.getSuggestedWeightLb(),
@@ -74,4 +80,6 @@ public record MemberWorkoutExerciseResponse(
                         .toList()
         );
     }
+    @Override
+    public String toString() { return "MemberWorkoutExerciseResponse[media URL redacted]"; }
 }

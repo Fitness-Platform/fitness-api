@@ -13,12 +13,21 @@ public record ProgramResourceRequest(
 
         String description,
 
-        @NotBlank
         @Size(max = 2048)
         String url,
 
         @NotNull
         @Positive
-        Integer position
+        Integer position,
+
+        java.util.UUID mediaId
 ) {
+    @jakarta.validation.constraints.AssertTrue(message = "Choose exactly one external URL or uploaded media")
+    public boolean isMediaSourceValid() {
+        return (url != null && !url.isBlank()) != (mediaId != null);
+    }
+
+    public ProgramResourceRequest(String title, String description, String url, Integer position) {
+        this(title, description, url, position, null);
+    }
 }

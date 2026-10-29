@@ -19,12 +19,15 @@ class ExerciseServiceTest {
     @Mock
     private ExerciseRepository exerciseRepository;
 
+    @Mock
+    private com.fitnessplatform.media.MediaService mediaService;
+
     private ExerciseService exerciseService;
 
     @BeforeEach
     void setUp() {
         exerciseService =
-                new ExerciseService(exerciseRepository);
+                new ExerciseService(exerciseRepository, mediaService);
     }
 
     @Test
@@ -167,7 +170,7 @@ class ExerciseServiceTest {
                         null
                 );
 
-        when(exerciseRepository.findById(exerciseId))
+        when(exerciseRepository.findLockedById(exerciseId))
                 .thenReturn(Optional.of(exercise));
 
         ExerciseRequest request =
@@ -211,7 +214,7 @@ class ExerciseServiceTest {
                         null
                 );
 
-        when(exerciseRepository.findById(exerciseId))
+        when(exerciseRepository.findLockedById(exerciseId))
                 .thenReturn(Optional.of(exercise));
 
         exerciseService.delete(exerciseId);

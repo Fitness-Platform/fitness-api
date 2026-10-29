@@ -11,4 +11,7 @@ public interface ProgramRepository extends JpaRepository<Program, UUID> {
     List<Program> findByStatusOrderByCreatedAtDescIdAsc(ProgramStatus status);
 
     Optional<Program> findByIdAndStatus(UUID id, ProgramStatus status);
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("select p from Program p where p.id = :id")
+    Optional<Program> findLockedById(@org.springframework.data.repository.query.Param("id") UUID id);
 }

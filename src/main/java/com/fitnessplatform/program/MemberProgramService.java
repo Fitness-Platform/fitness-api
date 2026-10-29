@@ -5,6 +5,7 @@ import com.fitnessplatform.workout.WorkoutExercise;
 import com.fitnessplatform.workout.WorkoutExerciseNotFoundException;
 import com.fitnessplatform.workout.WorkoutExerciseRepository;
 import org.springframework.stereotype.Service;
+import com.fitnessplatform.media.MediaService;
 import org.springframework.transaction.annotation.Transactional;
 import com.fitnessplatform.access.ProgramAccessWorkoutHistoryService;
 import com.fitnessplatform.access.ProgramAccessWorkoutSet;
@@ -45,6 +46,8 @@ public class MemberProgramService {
     private final ProgramAccessWorkoutHistoryService
             programAccessWorkoutHistoryService;
 
+    private final MediaService mediaService;
+
     public MemberProgramService(
             ProgramAccessAuthorizationService
                     programAccessAuthorizationService,
@@ -63,7 +66,8 @@ public class MemberProgramService {
             ProgramAccessWorkoutTrackingService
                     programAccessWorkoutTrackingService,
             ProgramAccessWorkoutHistoryService
-                    programAccessWorkoutHistoryService
+                    programAccessWorkoutHistoryService,
+            MediaService mediaService
     ) {
         this.programAccessAuthorizationService =
                 programAccessAuthorizationService;
@@ -91,6 +95,7 @@ public class MemberProgramService {
 
         this.programAccessWorkoutHistoryService =
                 programAccessWorkoutHistoryService;
+        this.mediaService = mediaService;
     }
 
     @Transactional(readOnly = true)
@@ -165,7 +170,8 @@ public class MemberProgramService {
         return MemberProgramDetailResponse.from(
                 access,
                 resources,
-                weekResponses
+                weekResponses,
+                resource -> mediaService.resolveUrl(resource.getUrl(), resource.getMedia())
         );
     }
 
@@ -292,7 +298,8 @@ public class MemberProgramService {
                 exercises,
                 currentWeights,
                 trackingState,
-                previousPerformance
+                previousPerformance,
+                exercise -> mediaService.resolveUrl(exercise.getExercise().getVideoUrl(), exercise.getExercise().getVideoMedia())
         );
     }
 

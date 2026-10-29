@@ -21,6 +21,11 @@ public record MemberProgramDetailResponse(
             List<ProgramResource> resources,
             List<MemberProgramWeekResponse> weeks
     ) {
+        return from(access, resources, weeks, ProgramResource::getUrl);
+    }
+
+    public static MemberProgramDetailResponse from(ProgramAccess access, List<ProgramResource> resources,
+            List<MemberProgramWeekResponse> weeks, java.util.function.Function<ProgramResource, String> urlResolver) {
         Program program =
                 access.getProgram();
 
@@ -32,7 +37,7 @@ public record MemberProgramDetailResponse(
                 access.getExpiresAt(),
                 resources.stream()
                         .map(
-                                MemberProgramResourceResponse::from
+                                resource -> MemberProgramResourceResponse.from(resource, urlResolver.apply(resource))
                         )
                         .toList(),
                 weeks

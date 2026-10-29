@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import com.fitnessplatform.media.*;
 import java.util.UUID;
 
 @Service
@@ -12,15 +13,19 @@ public class ProgramResourceService {
     private final ProgramResourceRepository programResourceRepository;
     private final ProgramRepository programRepository;
 
+    private final MediaService mediaService;
+
     public ProgramResourceService(
             ProgramResourceRepository programResourceRepository,
-            ProgramRepository programRepository
+            ProgramRepository programRepository,
+            MediaService mediaService
     ) {
         this.programResourceRepository =
                 programResourceRepository;
 
         this.programRepository =
                 programRepository;
+        this.mediaService = mediaService;
     }
 
     @Transactional
@@ -36,6 +41,8 @@ public class ProgramResourceService {
                 request.position()
         );
 
+        MediaService.validateSources(request.url(), request.mediaId(), true);
+        MediaUpload media = mediaService.attach(request.mediaId(), MediaPurpose.PROGRAM_RESOURCE, null);
         ProgramResource resource =
                 new ProgramResource(
                         program,
@@ -43,10 +50,11 @@ public class ProgramResourceService {
                         normalizeNullable(
                                 request.description()
                         ),
-                        request.url().strip(),
+                        normalizeNullable(request.url()),
                         request.position()
                 );
 
+        resource.setMedia(media);
         return programResourceRepository.save(
                 resource
         );
@@ -86,7 +94,7 @@ public class ProgramResourceService {
         findProgram(programId);
 
         ProgramResource resource =
-                findResource(
+                findLockedResource(
                         programId,
                         programResourceId
                 );
@@ -97,15 +105,20 @@ public class ProgramResourceService {
                 programResourceId
         );
 
+        MediaService.validateSources(request.url(), request.mediaId(), true);
+        MediaUpload old = resource.getMedia();
+        MediaUpload replacement = mediaService.attach(request.mediaId(), MediaPurpose.PROGRAM_RESOURCE, old);
         resource.update(
                 request.title().strip(),
                 normalizeNullable(
                         request.description()
                 ),
-                request.url().strip(),
+                normalizeNullable(request.url()),
                 request.position()
         );
 
+        resource.setMedia(replacement);
+        mediaService.retireReplaced(old, replacement);
         return resource;
     }
 
@@ -117,7 +130,7 @@ public class ProgramResourceService {
         findProgram(programId);
 
         ProgramResource resource =
-                findResource(
+                findLockedResource(
                         programId,
                         programResourceId
                 );
@@ -125,6 +138,12 @@ public class ProgramResourceService {
         programResourceRepository.delete(
                 resource
         );
+        mediaService.retireReplaced(resource.getMedia(), null);
+    }
+
+    private ProgramResource findLockedResource(UUID programId, UUID resourceId) {
+        return programResourceRepository.findLockedByIdAndProgramId(resourceId, programId)
+                .orElseThrow(() -> new ProgramResourceNotFoundException(resourceId));
     }
 
     private Program findProgram(

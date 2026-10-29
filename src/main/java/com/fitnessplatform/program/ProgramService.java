@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import com.fitnessplatform.media.MediaService;
 import java.util.UUID;
 
 @Service
@@ -11,10 +12,17 @@ public class ProgramService {
 
     private final ProgramRepository programRepository;
 
+    private final ProgramResourceRepository resourceRepository;
+    private final MediaService mediaService;
+
     public ProgramService(
-            ProgramRepository programRepository
+            ProgramRepository programRepository,
+            ProgramResourceRepository resourceRepository,
+            MediaService mediaService
     ) {
         this.programRepository = programRepository;
+        this.resourceRepository = resourceRepository;
+        this.mediaService = mediaService;
     }
 
     @Transactional
@@ -108,8 +116,17 @@ public class ProgramService {
 
     @Transactional
     public void delete(UUID programId) {
-        Program program = findById(programId);
+        // Serialize deletion with new child inserts before collecting owned media.
+        Program program = programRepository.findLockedById(programId)
+                .orElseThrow(() -> new ProgramNotFoundException(programId));
 
+        var resources = resourceRepository.findAllLockedByProgramId(programId);
+        for (ProgramResource resource : resources) {
+            mediaService.retireReplaced(resource.getMedia(), null);
+        }
+        // Explicitly delete loaded children before their parent; database cascades alone
+        // leave managed children referencing a deleted parent during Hibernate flush.
+        resourceRepository.deleteAll(resources);
         programRepository.delete(program);
     }
 

@@ -1,6 +1,7 @@
 package com.fitnessplatform.program;
 
 import jakarta.validation.Valid;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,6 +20,11 @@ public class MemberProgramController {
     ) {
         this.memberProgramService =
                 memberProgramService;
+    }
+
+    @ModelAttribute
+    public void preventMediaResponseCaching(HttpServletResponse response) {
+        response.setHeader("Cache-Control", "private, no-store");
     }
 
     @GetMapping

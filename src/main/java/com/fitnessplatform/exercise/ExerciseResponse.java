@@ -10,7 +10,8 @@ public record ExerciseResponse(
         String equipment,
         String videoUrl,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        com.fitnessplatform.media.MediaMetadataResponse uploadedMedia
 ) {
 
     public static ExerciseResponse from(Exercise exercise) {
@@ -21,7 +22,8 @@ public record ExerciseResponse(
                 exercise.getEquipment(),
                 exercise.getVideoUrl(),
                 exercise.getCreatedAt(),
-                exercise.getUpdatedAt()
+                exercise.getUpdatedAt(),
+                com.fitnessplatform.media.MediaMetadataResponse.from(exercise.getVideoMedia())
         );
     }
 }

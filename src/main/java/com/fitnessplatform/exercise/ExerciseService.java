@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import com.fitnessplatform.media.*;
 import java.util.UUID;
 
 @Service
@@ -12,16 +13,22 @@ public class ExerciseService {
 
     private final ExerciseRepository exerciseRepository;
 
+    private final MediaService mediaService;
+
     public ExerciseService(
-            ExerciseRepository exerciseRepository
+            ExerciseRepository exerciseRepository,
+            MediaService mediaService
     ) {
         this.exerciseRepository = exerciseRepository;
+        this.mediaService = mediaService;
     }
 
     @Transactional
     public Exercise create(
             ExerciseRequest request
     ) {
+        MediaService.validateSources(request.videoUrl(), request.videoMediaId(), false);
+        MediaUpload media = mediaService.attach(request.videoMediaId(), MediaPurpose.EXERCISE_VIDEO, null);
         Exercise exercise = new Exercise(
                 request.name().strip(),
                 normalizeNullable(request.instructions()),
@@ -29,6 +36,7 @@ public class ExerciseService {
                 normalizeNullable(request.videoUrl())
         );
 
+        exercise.setVideoMedia(media);
         return exerciseRepository.save(exercise);
     }
 
@@ -51,7 +59,11 @@ public class ExerciseService {
             UUID exerciseId,
             ExerciseRequest request
     ) {
-        Exercise exercise = findById(exerciseId);
+        Exercise exercise = exerciseRepository.findLockedById(exerciseId)
+                .orElseThrow(() -> new ExerciseNotFoundException(exerciseId));
+        MediaService.validateSources(request.videoUrl(), request.videoMediaId(), false);
+        MediaUpload old = exercise.getVideoMedia();
+        MediaUpload replacement = mediaService.attach(request.videoMediaId(), MediaPurpose.EXERCISE_VIDEO, old);
 
         exercise.update(
                 request.name().strip(),
@@ -60,16 +72,20 @@ public class ExerciseService {
                 normalizeNullable(request.videoUrl())
         );
 
+        exercise.setVideoMedia(replacement);
+        mediaService.retireReplaced(old, replacement);
         return exercise;
     }
 
     @Transactional
     public void delete(UUID exerciseId) {
-        Exercise exercise = findById(exerciseId);
+        Exercise exercise = exerciseRepository.findLockedById(exerciseId)
+                .orElseThrow(() -> new ExerciseNotFoundException(exerciseId));
 
         try {
             exerciseRepository.delete(exercise);
             exerciseRepository.flush();
+            mediaService.retireReplaced(exercise.getVideoMedia(), null);
 
         } catch (DataIntegrityViolationException exception) {
             throw new ExerciseInUseException(

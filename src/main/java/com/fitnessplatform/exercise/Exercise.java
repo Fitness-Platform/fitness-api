@@ -3,6 +3,7 @@ package com.fitnessplatform.exercise;
 import jakarta.persistence.*;
 
 import java.time.Instant;
+import com.fitnessplatform.media.MediaUpload;
 import java.util.UUID;
 
 @Entity
@@ -70,6 +71,13 @@ public class Exercise {
         this.equipment = equipment;
         this.videoUrl = videoUrl;
     }
+
+    @OneToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "video_media_id", unique = true)
+    private MediaUpload videoMedia;
+
+    public MediaUpload getVideoMedia() { return videoMedia; }
+    public void setVideoMedia(MediaUpload media) { this.videoMedia = media; }
 
     @PrePersist
     void onCreate() {

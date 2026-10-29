@@ -11,8 +11,10 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.OneToOne;
 
 import java.time.Instant;
+import com.fitnessplatform.media.MediaUpload;
 import java.util.UUID;
 
 @Entity
@@ -39,10 +41,7 @@ public class ProgramResource {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Column(
-            nullable = false,
-            length = 2048
-    )
+    @Column(length = 2048)
     private String url;
 
     @Column(nullable = false)
@@ -89,6 +88,13 @@ public class ProgramResource {
         this.url = url;
         this.position = position;
     }
+
+    @OneToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "media_id", unique = true)
+    private MediaUpload media;
+
+    public MediaUpload getMedia() { return media; }
+    public void setMedia(MediaUpload media) { this.media = media; }
 
     @PrePersist
     void onCreate() {

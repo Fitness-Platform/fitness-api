@@ -29,6 +29,9 @@ class ProgramResourceServiceTest {
     @Mock
     private ProgramRepository programRepository;
 
+    @Mock
+    private com.fitnessplatform.media.MediaService mediaService;
+
     private ProgramResourceService programResourceService;
 
     @BeforeEach
@@ -36,7 +39,8 @@ class ProgramResourceServiceTest {
         programResourceService =
                 new ProgramResourceService(
                         programResourceRepository,
-                        programRepository
+                        programRepository,
+                        mediaService
                 );
     }
 
@@ -378,7 +382,7 @@ class ProgramResourceServiceTest {
 
         when(
                 programResourceRepository
-                        .findByIdAndProgramId(
+                        .findLockedByIdAndProgramId(
                                 resourceId,
                                 programId
                         )
@@ -459,7 +463,7 @@ class ProgramResourceServiceTest {
 
         when(
                 programResourceRepository
-                        .findByIdAndProgramId(
+                        .findLockedByIdAndProgramId(
                                 resourceId,
                                 programId
                         )
@@ -525,7 +529,7 @@ class ProgramResourceServiceTest {
 
         when(
                 programResourceRepository
-                        .findByIdAndProgramId(
+                        .findLockedByIdAndProgramId(
                                 resourceId,
                                 programId
                         )
@@ -594,7 +598,7 @@ class ProgramResourceServiceTest {
 
         when(
                 programResourceRepository
-                        .findByIdAndProgramId(
+                        .findLockedByIdAndProgramId(
                                 resourceId,
                                 programId
                         )

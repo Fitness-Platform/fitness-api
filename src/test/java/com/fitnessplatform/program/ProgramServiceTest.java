@@ -19,13 +19,20 @@ class ProgramServiceTest {
     @Mock
     private ProgramRepository programRepository;
 
+    @Mock
+    private ProgramResourceRepository resourceRepository;
+    @Mock
+    private com.fitnessplatform.media.MediaService mediaService;
+
     private ProgramService programService;
 
     @BeforeEach
     void setUp() {
         programService =
                 new ProgramService(
-                        programRepository
+                        programRepository,
+                        resourceRepository,
+                        mediaService
                 );
     }
 
@@ -311,7 +318,7 @@ class ProgramServiceTest {
                 );
 
         when(
-                programRepository.findById(
+                programRepository.findLockedById(
                         programId
                 )
         ).thenReturn(

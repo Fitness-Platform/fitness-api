@@ -15,6 +15,16 @@ public record ExerciseRequest(
         String equipment,
 
         @Size(max = 2048)
-        String videoUrl
+        String videoUrl,
+
+        java.util.UUID videoMediaId
 ) {
+    @jakarta.validation.constraints.AssertTrue(message = "Choose either an external URL or uploaded media")
+    public boolean isMediaSourceValid() {
+        return videoMediaId == null || videoUrl == null || videoUrl.isBlank();
+    }
+
+    public ExerciseRequest(String name, String instructions, String equipment, String videoUrl) {
+        this(name, instructions, equipment, videoUrl, null);
+    }
 }
